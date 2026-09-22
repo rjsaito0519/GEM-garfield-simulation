@@ -39,3 +39,15 @@ target_link_libraries(export_field_samples PRIVATE
     Garfield::Garfield
     ROOT::Core ROOT::RIO ROOT::Gui ROOT::Geom ROOT::Graf ROOT::Graf3d ROOT::Gpad ROOT::Hist ROOT::Matrix ROOT::MathCore
 )
+
+add_executable(gen_gas_table gen_gas_table.cpp)
+target_link_libraries(gen_gas_table PRIVATE
+    Garfield::Garfield
+    ROOT::Core ROOT::RIO ROOT::Gui ROOT::Geom ROOT::Graf ROOT::Graf3d ROOT::Gpad ROOT::Hist ROOT::Matrix ROOT::MathCore
+)
+
+add_executable(single_gem_avalanche single_gem_avalanche.cpp)
+target_link_libraries(single_gem_avalanche PRIVATE
+    Garfield::Garfield
+    ROOT::Core ROOT::RIO ROOT::Gui ROOT::Geom ROOT::Graf ROOT::Graf3d ROOT::Gpad ROOT::Hist ROOT::Matrix ROOT::MathCore
+)

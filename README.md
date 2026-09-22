@@ -76,7 +76,9 @@ cmake --install .
 - [x] 単段GEM(50µm)の単位胞ジオメトリ・メッシュ生成、可視化 (`geometry/build_single_gem.py`)
 - [x] 単段GEMの電場マップ生成 (`geometry/single_gem_field_model.py`, `elmer/`, `macros/view_single_gem_field.cpp`)
 - [x] ホール内部へのガス体積の追加・Garfield++側インデックスのオフバイワン修正（詳細はコード中コメント参照）
-- [x] 3Dインタラクティブビューア (`macros/export_field_samples.cpp` + Plotly artifact)
-- [ ] 単段GEMでの電子雪崩ゲイン計算 (動作確認)
+- [x] 3Dインタラクティブビューア (`macros/export_field_samples.cpp` + Plotly artifact、`geometry/plot_3d_*.py`)
+- [x] 単段GEMでの電子雪崩ゲイン計算 (`macros/gen_gas_table.cpp`, `macros/single_gem_avalanche.cpp`)。
+      P10ガステーブル生成 → 電子雪崩が動作することを確認。V_GEM=305Vで100イベントの平均ゲイン
+      8.06±8.88（統計・注入位置ともにまだ粗い一次確認。定量的な妥当性検証は未実施）
 - [ ] 3段GEM (ギャップ含む) の電場マップ生成
 - [ ] 3段GEM本番マクロ
