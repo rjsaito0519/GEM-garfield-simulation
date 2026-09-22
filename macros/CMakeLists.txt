@@ -51,3 +51,9 @@ target_link_libraries(single_gem_avalanche PRIVATE
     Garfield::Garfield
     ROOT::Core ROOT::RIO ROOT::Gui ROOT::Geom ROOT::Graf ROOT::Graf3d ROOT::Gpad ROOT::Hist ROOT::Matrix ROOT::MathCore
 )
+
+add_executable(view_single_gem_avalanche_cross_section view_single_gem_avalanche_cross_section.cpp)
+target_link_libraries(view_single_gem_avalanche_cross_section PRIVATE
+    Garfield::Garfield
+    ROOT::Core ROOT::RIO ROOT::Gui ROOT::Geom ROOT::Graf ROOT::Graf3d ROOT::Gpad ROOT::Hist ROOT::Matrix ROOT::MathCore
+)
