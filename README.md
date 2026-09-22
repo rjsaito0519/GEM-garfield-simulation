@@ -88,4 +88,8 @@ cmake --install .
       トランスファー2kV/cm、インダクション3.1kV/cm、ドリフト130V/cmを積み上げ、
       カソード側で約-2542V。ElmerGridでconformalメッシュ・ElmerSolve成功、
       Garfield++での電位分布も各GEMホールで妥当な漏斗形状を確認済み
-- [ ] 3段GEMでの電子雪崩・ゲイン計算
+- [~] 3段GEMでの電子雪崩・ゲイン計算: 単位セル1個では二次電子が100%孔の壁に吸収され
+      GEM2に到達しない問題を発見。3x3セルにタイル化して境界アーティファクト由来の損失
+      (16%)はゼロにできたが、孔の壁そのものへの吸収(84%)は残ったまま — 未解決の
+      オープンな問題（`macros/probe_field.cpp`, `gem_unit_cell.hole_centers_tiled`,
+      メモリの`gmsh_elmer_garfield_pipeline_gotchas`参照）
