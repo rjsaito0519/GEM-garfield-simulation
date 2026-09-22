@@ -30,6 +30,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 function(add_gem_macro name)
     add_executable(${name} ${name}.cpp)
+    # ${CMAKE_CURRENT_SOURCE_DIR} lets macros #include "model_info.hh"; the
+    # ../include path is for vendored third-party headers (e.g.
+    # include/third_party/nlohmann/json.hpp, used by model_info.hh).
+    target_include_directories(${name} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../include
+    )
     target_link_libraries(${name} PRIVATE
         Garfield::Garfield
         ROOT::Core ROOT::RIO ROOT::Gui ROOT::Geom ROOT::Graf ROOT::Graf3d ROOT::Gpad ROOT::Hist ROOT::Matrix ROOT::MathCore

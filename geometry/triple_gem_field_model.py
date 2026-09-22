@@ -149,6 +149,9 @@ def _electrode_potentials_v(config: TripleGemTestConfig) -> dict[str, float]:
 class TripleGemFieldModel:
     physical_group_ids: dict[str, int]
     electrode_potentials_v: dict[str, float]
+    # Single source of truth for values (hole pitch, solved-domain extent)
+    # that C++ macros need but must not re-hardcode -- see macros/model_info.hh.
+    geometry_info: dict[str, float]
 
 
 def build_triple_gem_field_model(config: TripleGemTestConfig) -> TripleGemFieldModel:
@@ -243,4 +246,11 @@ def build_triple_gem_field_model(config: TripleGemTestConfig) -> TripleGemFieldM
     )
 
     electrode_potentials_v = _electrode_potentials_v(config)
-    return TripleGemFieldModel(physical_group_ids, electrode_potentials_v)
+    geometry_info = {
+        "pitch_cm": pitch_cm,
+        "half_extent_x_cm": half_extent_x_cm,
+        "half_extent_y_cm": half_extent_y_cm,
+        "z_domain_min_cm": z_induction_plane,
+        "z_domain_max_cm": z_drift_plane,
+    }
+    return TripleGemFieldModel(physical_group_ids, electrode_potentials_v, geometry_info)

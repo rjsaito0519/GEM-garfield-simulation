@@ -9,10 +9,9 @@
  * argument needed for it.
  *
  * Usage: view_gem_field <mesh/result directory> [zMinCm] [zMaxCm]
- *   zMinCm/zMaxCm bound the "full range" plot; default to the single-GEM
- *   stack's extent. Pass the 3-GEM stack's actual range for that model
- *   (see build_triple_gem_field_mesh.py's printed electrode potentials /
- *   the mesh cross-section plot for the numbers).
+ *   zMinCm/zMaxCm bound the "full range" plot; default to the solved
+ *   domain's own extent, read from "<mesh dir>/<baseName>_model_info.json"
+ *   (see model_info.hh) -- pass explicit values to plot a narrower range.
  */
 
 #include <filesystem>
@@ -27,6 +26,8 @@
 #include "Garfield/MediumMagboltz.hh"
 #include "Garfield/ViewField.hh"
 
+#include "model_info.hh"
+
 using namespace Garfield;
 
 int main(int argc, char* argv[]) {
@@ -36,8 +37,9 @@ int main(int argc, char* argv[]) {
   }
   const std::string meshDir = std::string(argv[1]) + "/";
   const std::string baseName = std::filesystem::path(argv[1]).filename().string();
-  const double zMin = argc > 2 ? std::stod(argv[2]) : -0.25;
-  const double zMax = argc > 3 ? std::stod(argv[3]) : 0.45;
+  const gem::ModelGeometryInfo geo = gem::LoadModelGeometryInfo(argv[1], baseName);
+  const double zMin = argc > 2 ? std::stod(argv[2]) : geo.z_domain_min_cm;
+  const double zMax = argc > 3 ? std::stod(argv[3]) : geo.z_domain_max_cm;
 
   // Must come before constructing TApplication -- see gem_avalanche.cpp's
   // comment on the same lines for why (avoids a possible hang trying to
@@ -72,11 +74,7 @@ int main(int argc, char* argv[]) {
   vf.SetNumberOfContours(50);
   vf.SetPlaneXZ();
 
-  // Pitch of the GEM hole pattern, hardcoded here to match
-  // gem_params.GEM_50UM/GEM_100UM (both use pitch = 140 um = 0.014 cm). If
-  // that ever changes, this must change with it -- there is no automatic
-  // link between the two right now.
-  const double pitchCm = 0.014;
+  const double pitchCm = geo.pitch_cm;
 
   TCanvas fullViewCanvas("full_view", "Potential, full stack", 700, 900);
   vf.SetCanvas(&fullViewCanvas);

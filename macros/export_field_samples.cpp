@@ -1,17 +1,22 @@
 /**
- * Sample the single-GEM Elmer field map on regular grids and dump the
- * results to JSON, for the interactive 3D viewer
- * (macros/output/field_viewer.html) to render as vector arrows and as
- * color-mapped slice planes.
+ * Sample an Elmer field map (single-GEM or the full 3-GEM stack -- this
+ * macro is geometry-agnostic) on regular grids and dump the results to
+ * JSON, for the interactive 3D viewer (macros/output/field_viewer.html) to
+ * render as vector arrows and as color-mapped slice planes.
  *
  * Two versions of each are written: a coarse "full" grid spanning the whole
- * drift-GEM-transfer stack (context), and a fine "zoom" grid restricted to
- * a thin slab around the GEM foil (where the field actually funnels through
- * the hole -- a uniform grid over the full range would barely resolve it).
+ * solved domain (context), and a fine "zoom" grid restricted to a thin slab
+ * around z=0 (where the field actually funnels through a hole -- a uniform
+ * grid over the full range would barely resolve it).
+ *
+ * The mesh/result base name and the pitch/domain-extent values are all
+ * taken from "<mesh dir>/<baseName>_model_info.json" (written by
+ * geometry/build_*_field_mesh.py), not hardcoded here -- see model_info.hh.
  *
  * Usage: export_field_samples <mesh/result directory> <output directory>
  */
 
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -20,25 +25,16 @@
 #include "Garfield/ComponentElmer.hh"
 #include "Garfield/MediumMagboltz.hh"
 
+#include "model_info.hh"
+
 using namespace Garfield;
 
 namespace {
 
-// Same caveat as view_single_gem_field.cpp: hardcoded to match
-// gem_params.GEM_50UM (pitch = 140 um = 0.014 cm), not read from a shared
-// source of truth.
-constexpr double kPitchCm = 0.014;
-// The solved domain is exactly one hexagonal unit cell (see
-// gem_unit_cell.py's _hole_centers / single_gem_field_model.py's
-// _add_gas_box): half-width pitch/2 in x, pitch*sqrt(3)/2 in y. Sampling
-// outside this returns status -6 ("outside the mesh") -- there is no field
-// map beyond the single cell that was actually meshed and solved. Shrunk by
-// 2% to stay clear of the boundary, where point-location can be flaky.
-constexpr double kHalfXCm = 0.98 * kPitchCm / 2.0;
-constexpr double kHalfYCm = 0.98 * kPitchCm * 0.8660254037844387;  // sqrt(3)/2
-constexpr double kFullZMinCm = -0.21;   // just past the transfer plane
-constexpr double kFullZMaxCm = 0.43;    // just past the drift plane
-constexpr double kZoomZCm = 0.006;      // +/- range around the GEM foil (z=0)
+// Half-range of the "zoom" grid around z=0 -- purely a display choice (how
+// closely to zoom in on a GEM foil), not a physical parameter that can get
+// out of sync between Python and C++, so it stays a local constant.
+constexpr double kZoomZCm = 0.006;
 
 struct FieldSample {
   double x, y, z;
@@ -97,7 +93,15 @@ int main(int argc, char* argv[]) {
     return 1;
   }
   const std::string meshDir = std::string(argv[1]) + "/";
+  const std::string baseName = std::filesystem::path(argv[1]).filename().string();
   const std::string outDir = std::string(argv[2]) + "/";
+
+  const gem::ModelGeometryInfo geo = gem::LoadModelGeometryInfo(argv[1], baseName);
+  // Shrunk by 2% to stay clear of the domain boundary, where point-location
+  // can be flaky (samples right on the edge can spuriously read back
+  // status -6, "outside the mesh").
+  const double halfXCm = 0.98 * geo.half_extent_x_cm;
+  const double halfYCm = 0.98 * geo.half_extent_y_cm;
 
   MediumMagboltz gas;
   gas.SetComposition("ar", 90., "ch4", 10.);
@@ -106,9 +110,9 @@ int main(int argc, char* argv[]) {
 
   ComponentElmer elm(meshDir + "mesh.header", meshDir + "mesh.elements",
                       meshDir + "mesh.nodes", meshDir + "dielectrics.dat",
-                      meshDir + "single_gem_field.result", "cm");
-  // Index 0, not body ID 1: see view_single_gem_field.cpp's comment on the
-  // same call for why (ComponentElmer subtracts 1 from every body ID before
+                      meshDir + baseName + ".result", "cm");
+  // Index 0, not body ID 1: see view_gem_field.cpp's comment on the same
+  // call for why (ComponentElmer subtracts 1 from every body ID before
   // using it as an array index).
   elm.SetMedium(0, &gas);
   // SetMedium() alone does not flag material 0 as a drift medium, which
@@ -119,14 +123,14 @@ int main(int argc, char* argv[]) {
   {
     const int nx = 6, ny = 5, nz = 24;
     WriteSamplesJson(
-        SampleGrid(elm, -kHalfXCm, kHalfXCm, nx, -kHalfYCm, kHalfYCm, ny,
-                   kFullZMinCm, kFullZMaxCm, nz),
+        SampleGrid(elm, -halfXCm, halfXCm, nx, -halfYCm, halfYCm, ny,
+                   geo.z_domain_min_cm, geo.z_domain_max_cm, nz),
         nx, ny, nz, outDir + "field_vectors_full.json");
   }
   {
     const int nx = 12, ny = 9, nz = 16;
     WriteSamplesJson(
-        SampleGrid(elm, -kHalfXCm, kHalfXCm, nx, -kHalfYCm, kHalfYCm, ny,
+        SampleGrid(elm, -halfXCm, halfXCm, nx, -halfYCm, halfYCm, ny,
                    -kZoomZCm, kZoomZCm, nz),
         nx, ny, nz, outDir + "field_vectors_zoom.json");
   }
@@ -135,14 +139,14 @@ int main(int argc, char* argv[]) {
   {
     const int nx = 60, nz = 240;
     WriteSamplesJson(
-        SampleGrid(elm, -kHalfXCm, kHalfXCm, nx, 0.0, 0.0, 1,
-                   kFullZMinCm, kFullZMaxCm, nz),
+        SampleGrid(elm, -halfXCm, halfXCm, nx, 0.0, 0.0, 1,
+                   geo.z_domain_min_cm, geo.z_domain_max_cm, nz),
         nx, 1, nz, outDir + "field_slice_full.json");
   }
   {
     const int nx = 80, nz = 80;
     WriteSamplesJson(
-        SampleGrid(elm, -kHalfXCm, kHalfXCm, nx, 0.0, 0.0, 1,
+        SampleGrid(elm, -halfXCm, halfXCm, nx, 0.0, 0.0, 1,
                    -kZoomZCm, kZoomZCm, nz),
         nx, 1, nz, outDir + "field_slice_zoom.json");
   }

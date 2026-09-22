@@ -107,6 +107,9 @@ class SingleGemFieldModel:
 
     physical_group_ids: dict[str, int]     # name -> Gmsh physical group tag
     electrode_potentials_v: dict[str, float]  # electrode name -> potential [V]
+    # Single source of truth for values (hole pitch, solved-domain extent)
+    # that C++ macros need but must not re-hardcode -- see model_info.hh.
+    geometry_info: dict[str, float]
 
 
 def build_single_gem_field_model(
@@ -194,4 +197,11 @@ def build_single_gem_field_model(
         "DriftPlaneElectrode": v_drift_plane,
         "TransferPlaneElectrode": v_transfer_plane,
     }
-    return SingleGemFieldModel(physical_group_ids, electrode_potentials_v)
+    geometry_info = {
+        "pitch_cm": gem_params.pitch_cm,
+        "half_extent_x_cm": gem_params.pitch_cm / 2.0,
+        "half_extent_y_cm": gem_params.pitch_cm * math.sqrt(3.0) / 2.0,
+        "z_domain_min_cm": z_transfer_plane,
+        "z_domain_max_cm": z_drift_plane,
+    }
+    return SingleGemFieldModel(physical_group_ids, electrode_potentials_v, geometry_info)

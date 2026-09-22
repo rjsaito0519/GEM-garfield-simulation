@@ -109,6 +109,7 @@ def main() -> None:
                 "electrode_potentials_v": field_model.electrode_potentials_v,
                 "dielectric_relative_permittivity": DIELECTRIC_RELATIVE_PERMITTIVITY,
                 "copper_relative_permittivity": COPPER_RELATIVE_PERMITTIVITY,
+                "geometry": field_model.geometry_info,
             },
             f,
             indent=2,
