@@ -60,7 +60,8 @@ int main(int argc, char* argv[]) {
     std::cout << "(" << p[0] << ", " << p[1] << ", " << p[2] << "): "
               << "E=(" << ex << ", " << ey << ", " << ez << ") V/cm, "
               << "|E|=" << std::sqrt(ex * ex + ey * ey + ez * ez) << " V/cm, "
-              << "V=" << v << " V, status=" << status << "\n";
+              << "V=" << v << " V, status=" << status
+              << ", medium=" << (medium ? medium->GetName() : "<null>") << "\n";
   }
   return 0;
 }

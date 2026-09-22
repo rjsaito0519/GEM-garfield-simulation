@@ -4,7 +4,11 @@
  * injection point need to match whichever model is being run). Injects
  * electrons near the hole axis, above the topmost GEM foil, in the drift
  * gas, and reports the resulting total gain (number of secondary
- * electrons) after passing through the whole field map.
+ * electrons) after passing through the whole field map. Also writes a
+ * per-electron-endpoint CSV ("<baseName>_avalanche_endpoints.csv" in the
+ * output dir: event,xs,ys,zs,ts,es,xe,ye,ze,te,ee,status) so where each
+ * electron's drift line actually ended can be examined directly, not just
+ * lumped into the printed status tally.
  *
  * The mesh/result base name is taken from the last path component of the
  * mesh directory (e.g. "single_gem_field" or "triple_gem_field"), matching
@@ -111,6 +115,16 @@ int main(int argc, char* argv[]) {
 
   const double t0 = 0.;
 
+  // Per-electron-endpoint CSV: which (x,y,z) each secondary electron's
+  // drift line actually ended at, not just its status code -- needed to
+  // tell "hit the hole wall partway down" apart from "hit the bottom
+  // copper" apart from "made it into the transfer gap but got lost later",
+  // all of which show up as the same StatusLeftDriftMedium(-5) in the
+  // tally below. See docs/debugging_notes.md.
+  const std::string endpointsPath = outDir + baseName + "_avalanche_endpoints.csv";
+  std::ofstream endpointsCsv(endpointsPath);
+  endpointsCsv << "event,xs,ys,zs,ts,es,xe,ye,ze,te,ee,status\n";
+
   std::vector<int> gains;
   std::map<int, int> endpointStatusCounts;
   gains.reserve(nEvents);
@@ -148,8 +162,13 @@ int main(int argc, char* argv[]) {
       int status;
       aval.GetElectronEndpoint(j, xs, ys, zs, ts, es, xe, ye, ze, te, ee, status);
       endpointStatusCounts[status]++;
+      endpointsCsv << i << "," << xs << "," << ys << "," << zs << "," << ts << ","
+                   << es << "," << xe << "," << ye << "," << ze << "," << te << ","
+                   << ee << "," << status << "\n";
     }
   }
+  endpointsCsv.close();
+  std::cout << "Wrote per-endpoint data to " << endpointsPath << "\n";
 
   std::cout << "Electron endpoint status tally (StatusLeftDriftArea=-1, "
                "StatusLeftDriftMedium=-5, StatusOutsideMesh=-6, other=see "
