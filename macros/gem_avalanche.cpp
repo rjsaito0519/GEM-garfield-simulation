@@ -12,7 +12,7 @@
  *
  * Usage: gem_avalanche <mesh/result dir> <.gas file> <n events>
  *                       <zSensorMin> <zSensorMax> <zInjection>
- *                       <xHalfCm> <yHalfCm> [output dir]
+ *                       <xHalfCm> <yHalfCm> [e0_eV] [injectionRadiusCm] [output dir]
  *   zSensorMin/Max: the sensor's z bounds [cm], from the induction/transfer
  *     plane at the bottom to the drift plane at the top (see the model's
  *     printed electrode potentials, or its mesh cross-section plot, for
@@ -22,6 +22,9 @@
  *   xHalfCm/yHalfCm: the built model's x/y half-extent [cm] -- pitch/2 and
  *     pitch*sqrt(3)/2 for a single unit cell, or n_cells_x/y times that for
  *     a tiled model (see geometry/triple_gem_field_model.py).
+ *   e0_eV: initial electron energy [eV], default 0.1 (roughly thermal).
+ *   injectionRadiusCm: each electron's (x, y) is offset from the hole axis
+ *     by a random radius in [0, injectionRadiusCm], default 0.0005 cm (5 um).
  */
 
 #include <cmath>
@@ -60,10 +63,18 @@ int main(int argc, char* argv[]) {
   const double zInjection = std::stod(argv[6]);
   const double xHalfCm = std::stod(argv[7]);
   const double yHalfCm = std::stod(argv[8]);
-  const std::string outDir = argc > 9 ? std::string(argv[9]) + "/" : "./";
+  const double e0 = argc > 9 ? std::stod(argv[9]) : 0.1;
+  const double injectionRadiusCm = argc > 10 ? std::stod(argv[10]) : 0.0005;
+  const std::string outDir = argc > 11 ? std::string(argv[11]) + "/" : "./";
 
-  TApplication app("app", &argc, argv);
+  // Must come *before* constructing TApplication: otherwise TApplication's
+  // own construction tries to connect to the X11 display named by $DISPLAY,
+  // which on this cluster is set but not actually reachable (SSH X11
+  // forwarding isn't really working here) -- that connection attempt can
+  // hang for a very long time (seen directly: one run sat at ~0% CPU
+  // producing no output at all). Setting batch mode first heads it off.
   gROOT->SetBatch(kTRUE);
+  TApplication app("app", &argc, argv);
 
   MediumMagboltz gas;
   if (!gas.LoadGasFile(gasFile)) {
@@ -90,8 +101,14 @@ int main(int argc, char* argv[]) {
   aval.SetSensor(&sensor);
   aval.EnablePlotting(&driftView);
   aval.SetCollisionSteps(100);
+  // Safety cap: a run with 150 events at the default settings was killed
+  // after 25+ minutes and 3.5+ GB RSS with no sign of finishing -- almost
+  // certainly one event's avalanche growing pathologically large (or stuck)
+  // rather than genuinely needing that much computation. Bound it so a
+  // single bad event cannot hang the whole run; GetAvalancheSize() still
+  // reports whatever size it reached when cut off.
+  aval.EnableAvalancheSizeLimit(2000);
 
-  const double e0 = 0.1;  // initial electron energy [eV]
   const double t0 = 0.;
 
   std::vector<int> gains;
@@ -100,7 +117,7 @@ int main(int argc, char* argv[]) {
   for (int i = 0; i < nEvents; ++i) {
     // Small random offset around the hole axis, matching the now-deleted
     // prototype's convention (test/gem_simulation/gem_avalanche.C).
-    const double r = 0.0005 * RndmUniform();
+    const double r = injectionRadiusCm * RndmUniform();
     const double phi = 2. * M_PI * RndmUniform();
     const double x0 = r * std::cos(phi);
     const double y0 = r * std::sin(phi);

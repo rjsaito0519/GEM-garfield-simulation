@@ -39,8 +39,11 @@ int main(int argc, char* argv[]) {
   const double zMin = argc > 2 ? std::stod(argv[2]) : -0.25;
   const double zMax = argc > 3 ? std::stod(argv[3]) : 0.45;
 
-  TApplication app("app", &argc, argv);
+  // Must come before constructing TApplication -- see gem_avalanche.cpp's
+  // comment on the same lines for why (avoids a possible hang trying to
+  // reach an unreachable $DISPLAY).
   gROOT->SetBatch(kTRUE);  // headless: only ever save canvases to files, never show them
+  TApplication app("app", &argc, argv);
 
   // The gas composition only needs to be set (not Initialise()'d with a full
   // Magboltz table) to view the field map: transport tables are only needed

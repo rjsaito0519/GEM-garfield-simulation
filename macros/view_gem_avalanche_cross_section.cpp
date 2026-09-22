@@ -58,8 +58,11 @@ int main(int argc, char* argv[]) {
   const double yHalfCm = std::stod(argv[10]);
   const std::string outDir = argc > 11 ? std::string(argv[11]) + "/" : "./";
 
-  TApplication app("app", &argc, argv);
+  // Must come before constructing TApplication -- see gem_avalanche.cpp's
+  // comment on the same lines for why (avoids a possible hang trying to
+  // reach an unreachable $DISPLAY).
   gROOT->SetBatch(kTRUE);
+  TApplication app("app", &argc, argv);
 
   MediumMagboltz gas;
   if (!gas.LoadGasFile(gasFile)) {
