@@ -1,16 +1,25 @@
 /**
  * Cross-section (x-z plane) view of a few electron avalanches overlaid on
- * the GEM foil outline, using ViewFEMesh + ViewDrift -- much easier to read
- * than the tangled 3D drift-line plot from single_gem_avalanche.cpp, since
- * everything is projected onto one plane through the hole axis.
+ * the GEM foil outline(s), using ViewFEMesh + ViewDrift -- much easier to
+ * read than a tangled 3D drift-line plot, since everything is projected
+ * onto one plane through the hole axis. Geometry-agnostic: works for the
+ * single-GEM model or the full 3-GEM stack.
  *
  * Runs only a handful of events on purpose: overlaying 100 avalanches on
  * one 2D plot would just be a solid blob.
  *
- * Usage: view_single_gem_avalanche_cross_section <mesh/result dir> <.gas file> <n events> [output dir]
+ * Usage: view_gem_avalanche_cross_section <mesh/result dir> <.gas file>
+ *          <n events> <zSensorMin> <zSensorMax> <zInjection>
+ *          <zPlotMin> <zPlotMax> <xHalfCm> <yHalfCm> [output dir]
+ *   zSensorMin/Max: full sensor bounds (same meaning as in gem_avalanche.cpp).
+ *   zPlotMin/Max: the (usually much narrower) z range actually drawn, e.g.
+ *     zoomed on just the GEM foil the electrons were injected above.
+ *   xHalfCm/yHalfCm: see gem_avalanche.cpp -- the built model's x/y
+ *     half-extent; also used directly as the plot's x range.
  */
 
 #include <cmath>
+#include <filesystem>
 #include <iostream>
 #include <string>
 
@@ -28,24 +37,26 @@
 
 using namespace Garfield;
 
-namespace {
-constexpr double kHalfXCm = 0.0068;
-constexpr double kHalfYCm = 0.0117;
-constexpr double kZTransferPlaneCm = -0.2029;
-constexpr double kZDriftPlaneCm = 0.4229;
-constexpr double kGemTopCu = 0.0029;
-}  // namespace
-
 int main(int argc, char* argv[]) {
-  if (argc < 4) {
-    std::cout << "Usage: view_single_gem_avalanche_cross_section "
-                 "<mesh/result dir> <.gas file> <n events> [output dir]\n";
+  if (argc < 11) {
+    std::cout << "Usage: view_gem_avalanche_cross_section <mesh/result dir> "
+                 "<.gas file> <n events> <zSensorMin> <zSensorMax> "
+                 "<zInjection> <zPlotMin> <zPlotMax> <xHalfCm> <yHalfCm> "
+                 "[output dir]\n";
     return 1;
   }
   const std::string meshDir = std::string(argv[1]) + "/";
+  const std::string baseName = std::filesystem::path(argv[1]).filename().string();
   const std::string gasFile = argv[2];
   const int nEvents = std::atoi(argv[3]);
-  const std::string outDir = argc > 4 ? std::string(argv[4]) + "/" : "./";
+  const double zSensorMin = std::stod(argv[4]);
+  const double zSensorMax = std::stod(argv[5]);
+  const double zInjection = std::stod(argv[6]);
+  const double zPlotMin = std::stod(argv[7]);
+  const double zPlotMax = std::stod(argv[8]);
+  const double xHalfCm = std::stod(argv[9]);
+  const double yHalfCm = std::stod(argv[10]);
+  const std::string outDir = argc > 11 ? std::string(argv[11]) + "/" : "./";
 
   TApplication app("app", &argc, argv);
   gROOT->SetBatch(kTRUE);
@@ -56,35 +67,33 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  // Material index 0 = Gas -- see single_gem_avalanche.cpp's comment on the
-  // same call for why it is 0 and not the mesh.names body ID (1).
+  // Material index 0 = Gas -- see gem_avalanche.cpp's comment on the same
+  // call for why.
   ComponentElmer elm(meshDir + "mesh.header", meshDir + "mesh.elements",
                       meshDir + "mesh.nodes", meshDir + "dielectrics.dat",
-                      meshDir + "single_gem_field.result", "cm");
+                      meshDir + baseName + ".result", "cm");
   elm.SetMedium(0, &gas);
   elm.DriftMedium(0);
 
   Sensor sensor;
   sensor.AddComponent(&elm);
-  sensor.SetArea(-kHalfXCm, -kHalfYCm, kZTransferPlaneCm,
-                 kHalfXCm, kHalfYCm, kZDriftPlaneCm);
+  sensor.SetArea(-xHalfCm, -yHalfCm, zSensorMin, xHalfCm, yHalfCm, zSensorMax);
 
   ViewDrift driftView;
-  driftView.SetArea(-kHalfXCm, -kHalfYCm, -0.02, kHalfXCm, kHalfYCm, 0.01);
+  driftView.SetArea(-xHalfCm, -yHalfCm, zSensorMin, xHalfCm, yHalfCm, zSensorMax);
 
   AvalancheMicroscopic aval;
   aval.SetSensor(&sensor);
   aval.EnablePlotting(&driftView);
   aval.SetCollisionSteps(100);
 
-  const double z0 = kGemTopCu + 0.003;
   const double e0 = 0.1;
   for (int i = 0; i < nEvents; ++i) {
     const double r = 0.0005 * RndmUniform();
     const double phi = 2. * M_PI * RndmUniform();
     const double x0 = r * std::cos(phi);
     const double y0 = r * std::sin(phi);
-    aval.AvalancheElectron(x0, y0, z0, 0., e0, 0., 0., 0.);
+    aval.AvalancheElectron(x0, y0, zInjection, 0., e0, 0., 0., -1.);
     int ne = 0, ni = 0;
     aval.GetAvalancheSize(ne, ni);
     std::cout << "Event " << i << "/" << nEvents << ": gain = " << ne << "\n";
@@ -103,10 +112,10 @@ int main(int argc, char* argv[]) {
 
   TCanvas canvas("c", "Avalanche cross section", 900, 900);
   meshView.SetCanvas(&canvas);
-  meshView.SetArea(-kHalfXCm, -0.02, kHalfXCm, 0.01);
+  meshView.SetArea(-xHalfCm, zPlotMin, xHalfCm, zPlotMax);
   meshView.Plot();
 
-  const std::string plotPath = outDir + "single_gem_avalanche_cross_section.png";
+  const std::string plotPath = outDir + baseName + "_avalanche_cross_section.png";
   canvas.SaveAs(plotPath.c_str());
   std::cout << "Wrote " << plotPath << "\n";
   return 0;

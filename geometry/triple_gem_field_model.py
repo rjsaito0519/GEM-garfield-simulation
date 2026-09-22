@@ -25,7 +25,7 @@ from dataclasses import dataclass
 import gmsh
 
 from gem_params import GEM_50UM, GEM_100UM, GemLayerParams
-from gem_unit_cell import build_gem_layer, build_hole_gas_volumes, hole_centers
+from gem_unit_cell import build_gem_layer, build_hole_gas_volumes, hole_centers_tiled
 
 DIELECTRIC_RELATIVE_PERMITTIVITY = 3.5
 COPPER_RELATIVE_PERMITTIVITY = 1.0
@@ -53,13 +53,23 @@ class TripleGemTestConfig:
         GemStackLayer("GEM2", GEM_50UM, 305.0),
         GemStackLayer("GEM3", GEM_50UM, 305.0),
     )
+    # A single hole per layer has no neighboring hole for an electron that
+    # diffuses sideways during a GEM avalanche to end up in -- found
+    # 2026-09-22 that this makes essentially all secondary electrons hit the
+    # hole wall instead of reaching the next GEM (see the project memory
+    # notes). Tiling n_cells_x x n_cells_y real neighboring holes around the
+    # one everything (gas gaps, electron injection) is centered on gives
+    # them somewhere physically realistic to go. Must both be odd.
+    n_cells_x: int = 3
+    n_cells_y: int = 3
 
 
-def _add_gas_box(pitch_cm: float, z_bottom_cm: float, height_cm: float) -> int:
-    half_x = pitch_cm / 2.0
-    half_y = pitch_cm * math.sqrt(3.0) / 2.0
+def _add_gas_box(
+    half_extent_x_cm: float, half_extent_y_cm: float, z_bottom_cm: float, height_cm: float
+) -> int:
     return gmsh.model.occ.addBox(
-        -half_x, -half_y, z_bottom_cm, pitch_cm, pitch_cm * math.sqrt(3.0), height_cm
+        -half_extent_x_cm, -half_extent_y_cm, z_bottom_cm,
+        2.0 * half_extent_x_cm, 2.0 * half_extent_y_cm, height_cm,
     )
 
 
@@ -147,17 +157,25 @@ def build_triple_gem_field_model(config: TripleGemTestConfig) -> TripleGemFieldM
     for layer in config.layers:
         if layer.params.pitch_cm != pitch_cm:
             raise ValueError("all GEM layers must share the same hex pitch")
-    centers_xy = hole_centers(pitch_cm)
+    centers_xy = hole_centers_tiled(pitch_cm, config.n_cells_x, config.n_cells_y)
+    half_extent_x_cm = config.n_cells_x * pitch_cm / 2.0
+    half_extent_y_cm = config.n_cells_y * pitch_cm * math.sqrt(3.0) / 2.0
     z_centers = _layer_z_centers(config)
 
     volume_names: list[str] = []
     volume_tags: list[int] = []
     for layer, z_center in zip(config.layers, z_centers):
-        vols = build_gem_layer(layer.params, z_center_cm=z_center)
+        vols = build_gem_layer(
+            layer.params, z_center_cm=z_center, hole_centers_list=centers_xy,
+            half_extent_x_cm=half_extent_x_cm, half_extent_y_cm=half_extent_y_cm,
+        )
         volume_names += [f"{layer.name}_copper_top", f"{layer.name}_dielectric", f"{layer.name}_copper_bottom"]
         volume_tags += [vols["copper_top"], vols["dielectric"], vols["copper_bottom"]]
 
-        hole_gas = build_hole_gas_volumes(layer.params, centers_xy, z_center_cm=z_center)
+        hole_gas = build_hole_gas_volumes(
+            layer.params, centers_xy, z_center_cm=z_center,
+            half_extent_x_cm=half_extent_x_cm, half_extent_y_cm=half_extent_y_cm,
+        )
         for i, tag in enumerate(hole_gas):
             volume_names.append(f"{layer.name}_hole_gas_{i}")
             volume_tags.append(tag)
@@ -168,13 +186,17 @@ def build_triple_gem_field_model(config: TripleGemTestConfig) -> TripleGemFieldM
     z_induction_plane = z_bottom_of_stack - config.induction_gap_cm
 
     volume_names.append("drift_gas")
-    volume_tags.append(_add_gas_box(pitch_cm, z_top_of_stack, config.drift_gap_cm))
+    volume_tags.append(_add_gas_box(half_extent_x_cm, half_extent_y_cm, z_top_of_stack, config.drift_gap_cm))
     for i in range(len(config.layers) - 1):
         z_bottom_of_transfer_gap = z_centers[i + 1] + _half_extent_cm(config.layers[i + 1])
         volume_names.append(f"transfer_gas_{i}")
-        volume_tags.append(_add_gas_box(pitch_cm, z_bottom_of_transfer_gap, config.transfer_gap_cm))
+        volume_tags.append(
+            _add_gas_box(half_extent_x_cm, half_extent_y_cm, z_bottom_of_transfer_gap, config.transfer_gap_cm)
+        )
     volume_names.append("induction_gas")
-    volume_tags.append(_add_gas_box(pitch_cm, z_induction_plane, config.induction_gap_cm))
+    volume_tags.append(
+        _add_gas_box(half_extent_x_cm, half_extent_y_cm, z_induction_plane, config.induction_gap_cm)
+    )
 
     new_tags = _fragment_into_conformal_volumes(volume_tags)
     volumes = dict(zip(volume_names, new_tags))
