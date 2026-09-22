@@ -5,13 +5,22 @@ project(gem_garfield_macros CXX)
 # CMake at them explicitly rather than relying on ~/.bashrc (which no longer
 # exports these, see README.md "実行環境").
 #
-# IMPORTANT: must use ROOT 6.32.04 (/sw/packages/root/6.32.04), not the
-# newer ~/local/root/6.40.04 -- ~/local/garfield's prebuilt libGarfield.so
-# was linked against 6.32.04's ROOT dictionary ABI (confirmed via its
-# original CMakeCache.txt) and fails to link against 6.40.04 with
-# "undefined reference to ROOT::TGenericClassInfo::TGenericClassInfo(...)"
-# because that ABI changed between the two ROOT versions.
-list(APPEND CMAKE_PREFIX_PATH "$ENV{HOME}/local/garfield" "/sw/packages/root/6.32.04")
+# ~/local/garfield was originally built against ROOT 6.32.04 and could not be
+# linked against the newer ~/local/root/6.40.04 (ABI mismatch: "undefined
+# reference to ROOT::TGenericClassInfo::TGenericClassInfo(...)"). Rebuilt and
+# reinstalled against 6.40.04 on 2026-09-22 (source at
+# ~/.package_build/garfieldpp) so the project can use one ROOT version
+# throughout; see README.md "実行環境" for the rebuild steps if this ever
+# needs to be redone (e.g. after upgrading ROOT again).
+#
+# NOTE: on this machine, an inherited CMAKE_PREFIX_PATH environment variable
+# and/or Garfield's own GarfieldConfig.cmake (which internally does
+# find_dependency(ROOT ...)) can cause CMake to resolve ROOT_DIR to a stale
+# path before this list() line's CMAKE_PREFIX_PATH is consulted. If a fresh
+# `cmake ..` ever reports the wrong ROOT under "Found Vdt: ...", force it
+# explicitly: `cmake -DROOT_DIR=$HOME/local/root/6.40.04/cmake ..`.
+list(APPEND CMAKE_PREFIX_PATH "$ENV{HOME}/local/garfield" "$ENV{HOME}/local/root/6.40.04")
+set(ROOT_DIR "$ENV{HOME}/local/root/6.40.04/cmake" CACHE PATH "" FORCE)
 
 find_package(Garfield REQUIRED)
 find_package(ROOT REQUIRED COMPONENTS Core RIO Gui Geom Graf Graf3d Gpad Hist Matrix MathCore)
