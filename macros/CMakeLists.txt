@@ -28,32 +28,16 @@ find_package(ROOT REQUIRED COMPONENTS Core RIO Gui Geom Graf Graf3d Gpad Hist Ma
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_executable(view_single_gem_field view_single_gem_field.cpp)
-target_link_libraries(view_single_gem_field PRIVATE
-    Garfield::Garfield
-    ROOT::Core ROOT::RIO ROOT::Gui ROOT::Geom ROOT::Graf ROOT::Graf3d ROOT::Gpad ROOT::Hist ROOT::Matrix ROOT::MathCore
-)
+function(add_gem_macro name)
+    add_executable(${name} ${name}.cpp)
+    target_link_libraries(${name} PRIVATE
+        Garfield::Garfield
+        ROOT::Core ROOT::RIO ROOT::Gui ROOT::Geom ROOT::Graf ROOT::Graf3d ROOT::Gpad ROOT::Hist ROOT::Matrix ROOT::MathCore
+    )
+endfunction()
 
-add_executable(export_field_samples export_field_samples.cpp)
-target_link_libraries(export_field_samples PRIVATE
-    Garfield::Garfield
-    ROOT::Core ROOT::RIO ROOT::Gui ROOT::Geom ROOT::Graf ROOT::Graf3d ROOT::Gpad ROOT::Hist ROOT::Matrix ROOT::MathCore
-)
-
-add_executable(gen_gas_table gen_gas_table.cpp)
-target_link_libraries(gen_gas_table PRIVATE
-    Garfield::Garfield
-    ROOT::Core ROOT::RIO ROOT::Gui ROOT::Geom ROOT::Graf ROOT::Graf3d ROOT::Gpad ROOT::Hist ROOT::Matrix ROOT::MathCore
-)
-
-add_executable(single_gem_avalanche single_gem_avalanche.cpp)
-target_link_libraries(single_gem_avalanche PRIVATE
-    Garfield::Garfield
-    ROOT::Core ROOT::RIO ROOT::Gui ROOT::Geom ROOT::Graf ROOT::Graf3d ROOT::Gpad ROOT::Hist ROOT::Matrix ROOT::MathCore
-)
-
-add_executable(view_single_gem_avalanche_cross_section view_single_gem_avalanche_cross_section.cpp)
-target_link_libraries(view_single_gem_avalanche_cross_section PRIVATE
-    Garfield::Garfield
-    ROOT::Core ROOT::RIO ROOT::Gui ROOT::Geom ROOT::Graf ROOT::Graf3d ROOT::Gpad ROOT::Hist ROOT::Matrix ROOT::MathCore
-)
+add_gem_macro(view_gem_field)
+add_gem_macro(export_field_samples)
+add_gem_macro(gen_gas_table)
+add_gem_macro(single_gem_avalanche)
+add_gem_macro(view_single_gem_avalanche_cross_section)

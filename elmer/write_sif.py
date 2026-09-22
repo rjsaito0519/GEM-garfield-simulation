@@ -1,8 +1,9 @@
-"""Generate the Elmer solver input file (.sif) for the single-GEM electrostatics test.
+"""Generate the Elmer solver input file (.sif) for an electrostatics test
+(single-GEM or the full 3-GEM stack -- this script is geometry-agnostic).
 
 Combines two inputs:
-  - electrode potentials / material permittivities from
-    geometry/build_single_gem_field_mesh.py's model info JSON.
+  - electrode potentials / material permittivities from the geometry
+    script's "<mesh_name>_model_info.json".
   - body/boundary target IDs from mesh.names, which ElmerGrid writes *after*
     converting the Gmsh mesh. ElmerGrid renumbers boundary physical groups to
     a compact range starting at 1 (e.g. our Gmsh tags 4-7 became 1-4), so the
@@ -12,15 +13,15 @@ Combines two inputs:
 This script must therefore run *after* ElmerGrid, not before it.
 
 Usage:
-    python3 write_sif.py
+    python3 write_sif.py <mesh_name>   # e.g. single_gem_field or triple_gem_field
 """
 
 import json
 import os
 import re
+import sys
 
 GEOMETRY_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "geometry", "output")
-MESH_NAME = "single_gem_field"  # matches the .msh file name from build_single_gem_field_mesh.py
 
 
 def write_dielectrics_dat(
@@ -76,52 +77,8 @@ def parse_mesh_names(mesh_names_path: str) -> tuple[dict[str, int], dict[str, in
                 current_section[match.group(1)] = int(match.group(2))
     return body_ids, boundary_ids
 
-SIF_TEMPLATE = """\
-Header
-  Mesh DB "." "{mesh_name}"
-End
 
-Simulation
-  Max Output Level = 5
-  Coordinate System = Cartesian
-  Coordinate Mapping(3) = 1 2 3
-  Simulation Type = Steady State
-  Steady State Max Iterations = 1
-  Output Intervals = 1
-  Output File = "{mesh_name}.result"
-  Post File = "{mesh_name}.vtu"
-End
-
-Constants
-  Permittivity of Vacuum = 8.8542e-12
-End
-
-Body 1
-  Name = "Gas"
-  Target Bodies(1) = {gas_id}
-  Equation = 1
-  Material = 1
-End
-
-Body 2
-  Name = "Dielectric"
-  Target Bodies(1) = {dielectric_id}
-  Equation = 1
-  Material = 2
-End
-
-Body 3
-  Name = "Copper"
-  Target Bodies(1) = {copper_id}
-  Equation = 1
-  Material = 3
-End
-
-Equation 1
-  Name = "Electrostatics"
-  Active Solvers(1) = 1
-End
-
+_SOLVER_BLOCK = """\
 Solver 1
   Equation = Stat Elec Solver
   Procedure = "StatElecSolve" "StatElecSolver"
@@ -136,85 +93,88 @@ Solver 1
   Linear System Convergence Tolerance = 1.0e-10
   Steady State Convergence Tolerance = 1.0e-8
 End
-
-Material 1
-  Name = "Gas"
-  Relative Permittivity = 1.0
-End
-
-Material 2
-  Name = "Dielectric"
-  Relative Permittivity = {dielectric_permittivity}
-End
-
-Material 3
-  Name = "Copper"
-  Relative Permittivity = {copper_permittivity}
-End
-
-Boundary Condition 1
-  Name = "TopCopperElectrode"
-  Target Boundaries(1) = {top_copper_id}
-  Potential = {top_copper_v}
-End
-
-Boundary Condition 2
-  Name = "BottomCopperElectrode"
-  Target Boundaries(1) = {bottom_copper_id}
-  Potential = {bottom_copper_v}
-End
-
-Boundary Condition 3
-  Name = "DriftPlaneElectrode"
-  Target Boundaries(1) = {drift_plane_id}
-  Potential = {drift_plane_v}
-End
-
-Boundary Condition 4
-  Name = "TransferPlaneElectrode"
-  Target Boundaries(1) = {transfer_plane_id}
-  Potential = {transfer_plane_v}
-End
 """
 
 
-def write_sif(
-    model_info: dict,
+def build_sif_text(
+    mesh_name: str,
     body_ids: dict[str, int],
     boundary_ids: dict[str, int],
-    output_path: str,
-) -> None:
-    potentials = model_info["electrode_potentials_v"]
+    body_permittivities: dict[str, float],
+    electrode_potentials_v: dict[str, float],
+) -> str:
+    """Build the .sif text from whatever bodies/boundaries are present --
+    works for the single-GEM model (3 bodies, 4 electrodes) and the 3-GEM
+    stack (3 bodies, 8 electrodes) alike, without hardcoding either shape.
+    """
+    blocks = [
+        f'Header\n  Mesh DB "." "{mesh_name}"\nEnd\n',
+        f'Simulation\n'
+        f'  Max Output Level = 5\n'
+        f'  Coordinate System = Cartesian\n'
+        f'  Coordinate Mapping(3) = 1 2 3\n'
+        f'  Simulation Type = Steady State\n'
+        f'  Steady State Max Iterations = 1\n'
+        f'  Output Intervals = 1\n'
+        f'  Output File = "{mesh_name}.result"\n'
+        f'  Post File = "{mesh_name}.vtu"\n'
+        f'End\n',
+        'Constants\n  Permittivity of Vacuum = 8.8542e-12\nEnd\n',
+    ]
 
-    sif_text = SIF_TEMPLATE.format(
-        mesh_name=MESH_NAME,
-        gas_id=body_ids["Gas"],
-        dielectric_id=body_ids["Dielectric"],
-        copper_id=body_ids["Copper"],
-        dielectric_permittivity=model_info["dielectric_relative_permittivity"],
-        copper_permittivity=model_info["copper_relative_permittivity"],
-        top_copper_id=boundary_ids["TopCopperElectrode"],
-        top_copper_v=potentials["TopCopperElectrode"],
-        bottom_copper_id=boundary_ids["BottomCopperElectrode"],
-        bottom_copper_v=potentials["BottomCopperElectrode"],
-        drift_plane_id=boundary_ids["DriftPlaneElectrode"],
-        drift_plane_v=potentials["DriftPlaneElectrode"],
-        transfer_plane_id=boundary_ids["TransferPlaneElectrode"],
-        transfer_plane_v=potentials["TransferPlaneElectrode"],
+    # Bodies/materials: one pair per body, in mesh.names' own ID order so
+    # "Material N" always lines up with "Body N".
+    body_names = sorted(body_ids, key=lambda name: body_ids[name])
+    for i, name in enumerate(body_names, start=1):
+        blocks.append(
+            f'Body {i}\n'
+            f'  Name = "{name}"\n'
+            f'  Target Bodies(1) = {body_ids[name]}\n'
+            f'  Equation = 1\n'
+            f'  Material = {i}\n'
+            f'End\n'
+        )
+
+    blocks.append('Equation 1\n  Name = "Electrostatics"\n  Active Solvers(1) = 1\nEnd\n')
+    blocks.append(_SOLVER_BLOCK)
+
+    for i, name in enumerate(body_names, start=1):
+        eps = body_permittivities.get(name, 1.0)
+        blocks.append(f'Material {i}\n  Name = "{name}"\n  Relative Permittivity = {eps}\nEnd\n')
+
+    # Boundaries: only the ones with a defined potential are real
+    # electrodes; e.g. "*_DielectricSurface" boundaries exist for the 3D
+    # viewer only and are intentionally left with Elmer's natural BC.
+    electrode_names = sorted(
+        (name for name in boundary_ids if name in electrode_potentials_v),
+        key=lambda name: boundary_ids[name],
     )
-    with open(output_path, "w") as f:
-        f.write(sif_text)
+    for i, name in enumerate(electrode_names, start=1):
+        blocks.append(
+            f'Boundary Condition {i}\n'
+            f'  Name = "{name}"\n'
+            f'  Target Boundaries(1) = {boundary_ids[name]}\n'
+            f'  Potential = {electrode_potentials_v[name]}\n'
+            f'End\n'
+        )
+
+    return "\n".join(blocks)
 
 
 def main() -> None:
-    model_info_path = os.path.join(GEOMETRY_OUTPUT_DIR, f"{MESH_NAME}_model_info.json")
+    if len(sys.argv) != 2:
+        print("Usage: python3 write_sif.py <mesh_name>  (e.g. single_gem_field, triple_gem_field)")
+        sys.exit(1)
+    mesh_name = sys.argv[1]
+
+    model_info_path = os.path.join(GEOMETRY_OUTPUT_DIR, f"{mesh_name}_model_info.json")
     with open(model_info_path) as f:
         model_info = json.load(f)
 
-    mesh_names_path = os.path.join(GEOMETRY_OUTPUT_DIR, MESH_NAME, "mesh.names")
+    mesh_names_path = os.path.join(GEOMETRY_OUTPUT_DIR, mesh_name, "mesh.names")
     body_ids, boundary_ids = parse_mesh_names(mesh_names_path)
 
-    dielectrics_path = os.path.join(GEOMETRY_OUTPUT_DIR, MESH_NAME, "dielectrics.dat")
+    dielectrics_path = os.path.join(GEOMETRY_OUTPUT_DIR, mesh_name, "dielectrics.dat")
     body_permittivities = {
         "Gas": 1.0,
         "Dielectric": model_info["dielectric_relative_permittivity"],
@@ -223,8 +183,12 @@ def main() -> None:
     write_dielectrics_dat(body_ids, body_permittivities, dielectrics_path)
     print(f"Wrote {dielectrics_path}")
 
-    output_path = os.path.join(GEOMETRY_OUTPUT_DIR, f"{MESH_NAME}.sif")
-    write_sif(model_info, body_ids, boundary_ids, output_path)
+    sif_text = build_sif_text(
+        mesh_name, body_ids, boundary_ids, body_permittivities, model_info["electrode_potentials_v"]
+    )
+    output_path = os.path.join(GEOMETRY_OUTPUT_DIR, f"{mesh_name}.sif")
+    with open(output_path, "w") as f:
+        f.write(sif_text)
     print(f"Wrote {output_path}. Body IDs: {body_ids}, boundary IDs: {boundary_ids}")
 
 

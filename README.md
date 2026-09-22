@@ -74,11 +74,18 @@ cmake --install .
 
 - [x] Gmsh Python APIのセットアップ
 - [x] 単段GEM(50µm)の単位胞ジオメトリ・メッシュ生成、可視化 (`geometry/build_single_gem.py`)
-- [x] 単段GEMの電場マップ生成 (`geometry/single_gem_field_model.py`, `elmer/`, `macros/view_single_gem_field.cpp`)
+- [x] 単段GEMの電場マップ生成 (`geometry/single_gem_field_model.py`, `elmer/`, `macros/view_gem_field.cpp`)
 - [x] ホール内部へのガス体積の追加・Garfield++側インデックスのオフバイワン修正（詳細はコード中コメント参照）
 - [x] 3Dインタラクティブビューア (`macros/export_field_samples.cpp` + Plotly artifact、`geometry/plot_3d_*.py`)
 - [x] 単段GEMでの電子雪崩ゲイン計算 (`macros/gen_gas_table.cpp`, `macros/single_gem_avalanche.cpp`)。
       P10ガステーブル生成 → 電子雪崩が動作することを確認。V_GEM=305Vで100イベントの平均ゲイン
       8.06±8.88（統計・注入位置ともにまだ粗い一次確認。定量的な妥当性検証は未実施）
-- [ ] 3段GEM (ギャップ含む) の電場マップ生成
-- [ ] 3段GEM本番マクロ
+- [x] 3段GEM (ギャップ含む) の電場マップ生成 (`geometry/triple_gem_field_model.py`,
+      `geometry/build_triple_gem_field_mesh.py`)。並び順は**ドリフト側から100→50→50µm**
+      （Kim et al. 2020論文の50→50→100µmとは異なる、2026-09-22にユーザーへ確認済みの現行設計）。
+      ドリフトギャップは実機の55cmではなく4.2mmの簡略値（近傍物理には影響しないための意図的な簡略化）。
+      電位連鎖（パッド面0V基準）: 各GEM電圧305V(50µm)/457.5V(100µm, 1.5倍則)、
+      トランスファー2kV/cm、インダクション3.1kV/cm、ドリフト130V/cmを積み上げ、
+      カソード側で約-2542V。ElmerGridでconformalメッシュ・ElmerSolve成功、
+      Garfield++での電位分布も各GEMホールで妥当な漏斗形状を確認済み
+- [ ] 3段GEMでの電子雪崩・ゲイン計算
