@@ -16,6 +16,10 @@ not regenerated here):
     (macros/export_avalanche_trajectories.cpp), optional: event,track,x,y,z,
     t,energy -- one row per recorded drift-line point. Skipped if missing
     (run export_avalanche_trajectories first to get one).
+  - macros/output/field_vectors_full.json (macros/export_field_samples.cpp):
+    same {"nx","ny","nz","samples"} schema as the slice file, but a genuine
+    3D grid (ny > 1) -- used to seed E-field streamlines through the hole.
+    Same baseName-prefix caveat as the slice file (see slice_path below).
 
 Usage:
     ~/.conda/envs/work/bin/python3 plot_triple_gem.py [baseName] [output.html]
@@ -111,6 +115,51 @@ def load_field_slice(slice_json_path: str) -> pv.StructuredGrid:
     return grid
 
 
+def load_field_vector_grid(vectors_json_path: str) -> pv.StructuredGrid:
+    """The full 3D field-vector grid (see export_field_samples.cpp) as a
+    PyVista StructuredGrid with an "E" vector point-data array, for seeding
+    streamlines. Coarser than the slice grid (it has to stay a manageable
+    size as a real 3D array, not a 2D plane) so streamlines through a
+    narrow GEM hole will only be approximately resolved."""
+    with open(vectors_json_path) as f:
+        data = json.load(f)
+    nx, ny, nz = data["nx"], data["ny"], data["nz"]
+    samples = data["samples"]
+    x = np.array([s["x"] for s in samples]).reshape(nx, ny, nz)
+    y = np.array([s["y"] for s in samples]).reshape(nx, ny, nz)
+    z = np.array([s["z"] for s in samples]).reshape(nx, ny, nz)
+    ex = np.array([s["ex"] for s in samples]).reshape(nx, ny, nz)
+    ey = np.array([s["ey"] for s in samples]).reshape(nx, ny, nz)
+    ez = np.array([s["ez"] for s in samples]).reshape(nx, ny, nz)
+
+    grid = pv.StructuredGrid(x, y, z)
+    vectors = np.stack(
+        [ex.reshape(-1, order="F"), ey.reshape(-1, order="F"), ez.reshape(-1, order="F")],
+        axis=1,
+    )
+    grid["E"] = vectors
+    return grid
+
+
+def compute_streamlines(
+    vector_grid: pv.StructuredGrid, z_seed_cm: float, seed_radius_cm: float, n_seeds: int = 12
+) -> pv.PolyData:
+    """Seed a ring of points at z_seed_cm around the hole axis (x=y=0) and
+    trace E-field lines through the grid in both directions -- z_seed_cm
+    should be just above a GEM foil's hole, in the drift/transfer gas,
+    where the field is still fairly uniform and every seed should funnel
+    into the same hole."""
+    theta = np.linspace(0, 2 * np.pi, n_seeds, endpoint=False)
+    seeds = pv.PolyData(np.stack(
+        [seed_radius_cm * np.cos(theta), seed_radius_cm * np.sin(theta),
+         np.full(n_seeds, z_seed_cm)],
+        axis=1,
+    ))
+    return vector_grid.streamlines_from_source(
+        seeds, vectors="E", integration_direction="both", max_length=100.0,
+    )
+
+
 def load_trajectories(csv_path: str) -> pv.PolyData | None:
     """All (event,track) drift lines in one PolyData (one VTK "lines" cell
     per track), colored by kinetic energy [eV] -- much cheaper to render
@@ -143,6 +192,7 @@ def build_plotter(
     mesh_groups: dict[str, pv.PolyData],
     field_slice: pv.StructuredGrid,
     trajectories: pv.PolyData | None = None,
+    streamlines: pv.PolyData | None = None,
 ) -> pv.Plotter:
     pl = pv.Plotter(off_screen=True)
     for name, mesh in mesh_groups.items():
@@ -157,6 +207,8 @@ def build_plotter(
             trajectories, scalars="energy [eV]", cmap="plasma", line_width=3,
             render_lines_as_tubes=True, show_scalar_bar=True,
         )
+    if streamlines is not None and streamlines.n_points > 0:
+        pl.add_mesh(streamlines, color="cyan", line_width=2, render_lines_as_tubes=True)
     pl.add_axes()
     pl.camera_position = "xz"
     return pl
@@ -177,7 +229,9 @@ def main() -> None:
     # macros/output/field_slice_full.json currently belongs to except by
     # re-running export_field_samples for base_name right before this.
     slice_path = os.path.join(MACROS_OUTPUT_DIR, "field_slice_full.json")
+    vectors_path = os.path.join(MACROS_OUTPUT_DIR, "field_vectors_full.json")
     trajectories_path = os.path.join(MACROS_OUTPUT_DIR, f"{base_name}_avalanche_trajectories.csv")
+    model_info_path = os.path.join(GEOMETRY_OUTPUT_DIR, f"{base_name}_model_info.json")
 
     mesh_groups = load_geometry_meshes(surfaces_path)
     print(f"Loaded {len(mesh_groups)} geometry groups from {surfaces_path}")
@@ -193,7 +247,23 @@ def main() -> None:
         print(f"No trajectory CSV at {trajectories_path} -- skipping "
               "(run export_avalanche_trajectories first to include one)")
 
-    pl = build_plotter(mesh_groups, field_slice, trajectories)
+    streamlines = None
+    if os.path.exists(vectors_path) and os.path.exists(model_info_path):
+        with open(model_info_path) as f:
+            geo = json.load(f)["geometry"]
+        vector_grid = load_field_vector_grid(vectors_path)
+        # Seed just below the domain's top (the topmost GEM's hole opening
+        # in the drift/transfer gas), on a small ring well inside the
+        # nominal hole radius so every seed funnels into the same hole.
+        z_seed = geo["z_domain_max_cm"] - 0.01 * (geo["z_domain_max_cm"] - geo["z_domain_min_cm"])
+        seed_radius = geo["pitch_cm"] / 12.0
+        streamlines = compute_streamlines(vector_grid, z_seed, seed_radius)
+        print(f"Computed {streamlines.n_points} streamline points from {vectors_path} "
+              f"(seeded at z={z_seed:.4f} cm, r={seed_radius:.5f} cm)")
+    else:
+        print(f"No field-vector grid/model info for {base_name} -- skipping streamlines")
+
+    pl = build_plotter(mesh_groups, field_slice, trajectories, streamlines)
     pl.trame.export_html(out_path)
     print(f"Wrote {out_path}")
 
