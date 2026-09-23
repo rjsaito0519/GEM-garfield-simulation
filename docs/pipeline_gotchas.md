@@ -137,6 +137,21 @@
     前提にしたパス計算なので、`results/`の構成自体を変える場合はこの関数の
     ロジックも一緒に直すこと。
 
+20. **`results/mesh`・`results/root`はディスク容量が大きくなる（mesh/root
+    ファイル合計で数GB～）ため、home配下ではなくgroupストレージに実体を置き、
+    symlinkで`results/`配下から参照している。** 2026-09-24時点:
+    `/group/had/sks/Users/sryuta/GEM_garfield/{mesh,root}`が実体、
+    `results/mesh`・`results/root`はそこへのsymlink。`.gitignore`の
+    `results/*`パターンはsymlink自体もパス名一致で無視するため、
+    symlinkに変えても`git status`には出てこない。パス解決は透過的
+    （`results/mesh/<baseName>/...`のようにこれまで通りアクセス可能）
+    なので、上記19番の前提も壊れない。新しい実行環境でこのリポジトリを
+    セットアップする場合は、このsymlinkが存在しないと`results/mesh`・
+    `results/root`が単なる空ディレクトリとして作られてしまう点に注意
+    （`geometry/build_*.py`等は`os.makedirs(..., exist_ok=True)`で
+    ディレクトリを作るだけなので、symlinkが無くても動く自体は動くが、
+    home配下の容量を消費してしまう）。
+
 ## Garfield++の再ビルド（ROOTバージョンを変えた場合）
 
 Garfield++はROOTとABI互換性がある状態でリンクされている必要がある。ROOTを
