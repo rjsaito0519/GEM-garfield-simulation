@@ -562,6 +562,45 @@ cohortの絶対数(470)自体は未タイル化(453)とほぼ変わらないた�
 ものではない — transfer電場はGEM抽出効率自体（GEM bottom crossing rate）
 には影響しないため。
 
+## 2026-09-24: 孔taper形状（biconical vs cylindrical）scanをタイル化geometryで再評価 → 結論は変わらず
+
+前回の孔taper形状sensitivity scan（"2026-09-23: 孔形状..."節）はタイル化前の
+単一セルgeometryで行われており、`Mean gain`（`GetAvalancheSize`が返す
+総生成電子数、GEM抽出とは別の量）だけを比較していた。単段GEM100テスト
+ベッドを3x3タイル化した今、修正済みplane-crossing指標（genuine GEM bottom
+通過率）で同じ4ケースをやり直した。
+
+### 手法
+
+`single_gem100_field`（内径35µm、タイル化済み、既存）に加え、
+id45/id55/id65を`build_single_gem100_field_mesh.py 2000 1.0 <id>`で
+タイル化geometryとして再構築・再solve（各45-47秒で収束）、50イベントで
+`export_avalanche_trajectories`を再実行。
+
+### 結果
+
+```
+内径(µm)   avalanche e-   GEM-extracted cohort   transfer 90%到達
+  35(現状)   1140          491 (43.1%)             8.8% of cohort
+  45         1586          607 (38.3%)             9.6% of cohort
+  55         2633         1022 (38.8%)              7.9% of cohort
+  65(円筒)   4216         1565 (37.1%)              7.6% of cohort
+```
+
+孔が広いほどavalanche電子の絶対数（≈gain）は大きく増える（前回の
+Mean gain 30.9→47.1→54.0→64.8という結果と定性的に整合）一方、
+**genuine GEM抽出効率（GEM bottom通過率）もtransfer gap侵入の深さも、
+4ケースでほぼ一定（抽出37-43%、90%地点到達7.6-9.6%）**。
+
+### 結論
+
+**「孔のtaper形状(biconical vs cylindrical)が主因ではない」という前回の
+結論は、修正済みplane-crossing指標＋タイル化geometryでも変わらず確認
+された。** 孔を広げるとavalanche gain自体は増えるが、抽出効率・輸送効率
+にはほとんど影響しない。孔径ではなく、GEM孔内部の局所電場形状（off-axis
+secondaryの発生位置とfield line方向の関係、2026-09-23の`r_birth`解析で
+確認済み）がより支配的な要因と考えられる。
+
 ## 現時点の結論と次の一手候補
 
 - 電場の「向き」（仮説1）・「大きさ」（transfer field scan、GEM電圧3倍scan）・
@@ -594,10 +633,11 @@ cohortの絶対数(470)自体は未タイル化(453)とほぼ変わらないた�
   `n_cells_x/y`追加）。**確定した結論**: GEM抽出効率自体は電場非依存
   (~43-47%)、transfer gap侵入深さは電場に明確に依存（tf2000で90%地点
   8.8%到達 vs tf10000で43.2%）。境界アーティファクトは3段スタックと
-  同水準(40-47%)まで低下し、もはや支配的要因ではない、(ii) 孔taper
-  形状の感度scanを同判定で再評価（**単段テストベッドは今タイル化済み
-  なので、このscanもタイル化済みgeometryでやり直す必要あり**）、
-  (iii) field-line tracerのstep size
+  同水準(40-47%)まで低下し、もはや支配的要因ではない。~~孔taper
+  形状の感度scanを同判定で再評価~~ → 2026-09-24実施済み（タイル化
+  geometryで4ケース再実行。**確定した結論**: 抽出効率37-43%、90%地点
+  到達7.6-9.6%といずれもtaper形状にほぼ非依存 — 「taper形状は主因では
+  ない」という結論を再確認）、(iii) field-line tracerのstep size
   convergence確認(0.02/0.01/0.005µm)、(iv) mesh convergence test（孔近傍
   メッシュを1/2, 1/4に細かくしても結果が変わらないか）、(v) 3段スタック
   transfer gap 1に残る境界アーティファクト(約51%)を減らすため5x5タイル化
