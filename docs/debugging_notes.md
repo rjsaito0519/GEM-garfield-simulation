@@ -601,6 +601,33 @@ Mean gain 30.9→47.1→54.0→64.8という結果と定性的に整合）一方
 secondaryの発生位置とfield line方向の関係、2026-09-23の`r_birth`解析で
 確認済み）がより支配的な要因と考えられる。
 
+## 2026-09-24: field-line tracerのstep size convergence確認 → 数値的に収束済み
+
+`macros/trace_field_lines.cpp`（固定ステップEuler積分）の結果を物理的な
+証拠として使う前に、ステップ幅への依存性を確認した。タイル化済みの
+`single_gem100_field`上で、GEM1の孔（外径32.5µm、r=0/8.125/16.25/24.375/
+32.5µmの5リング×8方位=33本）から、step=0.02/0.01(デフォルト)/0.005µmの
+3通りで再実行。
+
+```
+step=0.02um: downstream 17/33 (51.5%),        stuck_in_foil 16/33 (48.5%)
+step=0.01um: max_steps_reached 17/33 (51.5%), stuck_in_foil 16/33 (48.5%)
+step=0.005um: max_steps_reached 17/33 (51.5%), stuck_in_foil 16/33 (48.5%)
+```
+
+`downstream`と`max_steps_reached`はラベルは違うが同じ意味（foilを抜けて
+open gas領域に達した後、mesh外へ出るか`maxSteps`上限に達したかの違いで
+ラベルが変わるだけ — `maxSteps`をstep幅に対して固定しているため、step
+を細かくすると同じstep数でカバーする距離が短くなり、mesh境界に届かず
+"max_steps_reached"になりやすい。物理的な分類が変わったわけではない）。
+
+**3種類のstep幅で、"foilを抜けたか/壁に吸収されたか"の内訳が完全に一致
+（51.5% vs 48.5%）— field-line積分は数値的に収束していることを確認した。**
+内訳も、近軸(r=0/8.125/16.25µm)の17本が抜け、外側(r=24.375/32.5µm)の
+16本が壁に吸収される、という従来の定性的な結果（r≲20µmは100%下流、
+r≳24µmは80%が壁）と一致しており、タイル化後のmeshでも同じ描像が保たれる
+ことも確認できた。
+
 ## 現時点の結論と次の一手候補
 
 - 電場の「向き」（仮説1）・「大きさ」（transfer field scan、GEM電圧3倍scan）・
@@ -637,8 +664,10 @@ secondaryの発生位置とfield line方向の関係、2026-09-23の`r_birth`解
   形状の感度scanを同判定で再評価~~ → 2026-09-24実施済み（タイル化
   geometryで4ケース再実行。**確定した結論**: 抽出効率37-43%、90%地点
   到達7.6-9.6%といずれもtaper形状にほぼ非依存 — 「taper形状は主因では
-  ない」という結論を再確認）、(iii) field-line tracerのstep size
-  convergence確認(0.02/0.01/0.005µm)、(iv) mesh convergence test（孔近傍
+  ない」という結論を再確認）。~~field-line tracerのstep size
+  convergence確認(0.02/0.01/0.005µm)~~ → 2026-09-24実施済み（3種類の
+  step幅で内訳が完全一致(51.5%/48.5%)、数値的に収束済みと確認）、
+  (iv) mesh convergence test（孔近傍
   メッシュを1/2, 1/4に細かくしても結果が変わらないか）、(v) 3段スタック
   transfer gap 1に残る境界アーティファクト(約51%)を減らすため5x5タイル化
   を試す、(vi) 統計を100-200
