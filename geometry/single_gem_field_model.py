@@ -17,7 +17,7 @@ from dataclasses import dataclass
 import gmsh
 
 from gem_params import GemLayerParams
-from gem_unit_cell import build_gem_layer, build_hole_gas_volumes, hole_centers
+from gem_unit_cell import build_gem_layer, build_hole_gas_volumes, hole_centers_tiled
 
 # Relative permittivity of the GEM's dielectric (polyimide), a standard
 # textbook value also used by the reference repository (PER_INSULATOR).
@@ -48,6 +48,18 @@ class SingleGemTestConfig:
     transfer_gap_cm: float = 0.20    # GEM1 -> GEM2, Fig. 5
     transfer_field_v_per_cm: float = 2000.0
     gem_voltage_v: float = 305.0     # potential difference across the GEM foil
+    # A single hole has no neighboring hole for an electron that diffuses
+    # sideways during a GEM avalanche to end up in, which makes the single
+    # cell's own lateral (x/y) domain boundary a large, confounding loss
+    # channel (found 2026-09-23 while re-evaluating the transfer-field scan
+    # -- see docs/debugging_notes.md -- most "died in transfer gap" tracks
+    # sat right at this single cell's edge). Tiling n_cells_x x n_cells_y
+    # real neighboring holes around the one everything is centered on, same
+    # as triple_gem_field_model.py's TripleGemTestConfig, gives diffusing
+    # electrons somewhere physically realistic to go instead. Must both be
+    # odd (tiling centered on one cell).
+    n_cells_x: int = 3
+    n_cells_y: int = 3
 
 
 def _flat_boundary_surface(volume_tag: int, z_target_cm: float) -> int:
@@ -64,11 +76,12 @@ def _flat_boundary_surface(volume_tag: int, z_target_cm: float) -> int:
     raise RuntimeError(f"No flat boundary surface found at z={z_target_cm} for volume {volume_tag}")
 
 
-def _add_gas_box(pitch_cm: float, z_bottom_cm: float, height_cm: float) -> int:
-    half_x = pitch_cm / 2.0
-    half_y = pitch_cm * math.sqrt(3.0) / 2.0
+def _add_gas_box(
+    half_extent_x_cm: float, half_extent_y_cm: float, z_bottom_cm: float, height_cm: float
+) -> int:
     return gmsh.model.occ.addBox(
-        -half_x, -half_y, z_bottom_cm, pitch_cm, pitch_cm * math.sqrt(3.0), height_cm
+        -half_extent_x_cm, -half_extent_y_cm, z_bottom_cm,
+        2.0 * half_extent_x_cm, 2.0 * half_extent_y_cm, height_cm,
     )
 
 
@@ -122,14 +135,24 @@ def build_single_gem_field_model(
     z_drift_plane = z_gem_top + test_config.drift_gap_cm
     z_transfer_plane = z_gem_bottom - test_config.transfer_gap_cm
 
-    centers = hole_centers(gem_params.pitch_cm)
-    gem_volumes = build_gem_layer(gem_params, z_center_cm=0.0)
-    drift_gas = _add_gas_box(gem_params.pitch_cm, z_gem_top, test_config.drift_gap_cm)
-    transfer_gas = _add_gas_box(gem_params.pitch_cm, z_transfer_plane, test_config.transfer_gap_cm)
+    centers = hole_centers_tiled(gem_params.pitch_cm, test_config.n_cells_x, test_config.n_cells_y)
+    half_extent_x_cm = test_config.n_cells_x * gem_params.pitch_cm / 2.0
+    half_extent_y_cm = test_config.n_cells_y * gem_params.pitch_cm * math.sqrt(3.0) / 2.0
+    gem_volumes = build_gem_layer(
+        gem_params, z_center_cm=0.0, hole_centers_list=centers,
+        half_extent_x_cm=half_extent_x_cm, half_extent_y_cm=half_extent_y_cm,
+    )
+    drift_gas = _add_gas_box(half_extent_x_cm, half_extent_y_cm, z_gem_top, test_config.drift_gap_cm)
+    transfer_gas = _add_gas_box(
+        half_extent_x_cm, half_extent_y_cm, z_transfer_plane, test_config.transfer_gap_cm
+    )
     # Fills the hole cavities (see build_hole_gas_volumes' docstring): without
     # this, the hole -- the actual gas-amplification region -- is a literal
     # gap in the mesh, with no material solved there at all.
-    hole_gas = build_hole_gas_volumes(gem_params, centers, z_center_cm=0.0)
+    hole_gas = build_hole_gas_volumes(
+        gem_params, centers, z_center_cm=0.0,
+        half_extent_x_cm=half_extent_x_cm, half_extent_y_cm=half_extent_y_cm,
+    )
 
     volume_names = (
         ["copper_top", "dielectric", "copper_bottom", "drift_gas", "transfer_gas"]
@@ -199,8 +222,8 @@ def build_single_gem_field_model(
     }
     geometry_info = {
         "pitch_cm": gem_params.pitch_cm,
-        "half_extent_x_cm": gem_params.pitch_cm / 2.0,
-        "half_extent_y_cm": gem_params.pitch_cm * math.sqrt(3.0) / 2.0,
+        "half_extent_x_cm": half_extent_x_cm,
+        "half_extent_y_cm": half_extent_y_cm,
         "z_domain_min_cm": z_transfer_plane,
         "z_domain_max_cm": z_drift_plane,
     }
