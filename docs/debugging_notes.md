@@ -804,6 +804,80 @@ r_birth解析（3086電子、GEM1内生成）は従来と同じ単調減少パ�
 透過は非常に低いものの、ゼロではなく、各段でカスケード的に効率が
 落ちていくという描像を定量的に裏付けている。
 
+## 2026-09-24: GEM孔形状の文献確認 — S.H. Kim et al. 2020 本文Table 1/Fig. 6を直接確認
+
+これまで「Kim et al. 2020のTable 1数値をbiconicalと仮定しているだけで、
+実際の断面写真等では未確認」としていた点について、論文本体
+(doi:10.1088/1742-6596/1498/1/012023、Open Access)をPDFで直接取得し
+確認した。
+
+### 確認できた事実（論文本文からの直接引用）
+
+**Table 1（50µm GEM と 100µm GEM の比較）:**
+
+| Property | 50 µm GEM | 100 µm GEM |
+|---|---|---|
+| Manufacturer | Raytech | Raytech |
+| Insulator material | Polyimide (PI) | Liquid Crystal Polymer (LCP) |
+| Etching method | Wet | **Laser** |
+| Cu thickness | 4 µm | 9 µm |
+| Pitch (d) | 140 µm | 140 µm |
+| Inner diameter (r) | 25 ± 10 µm | 35 ± 10 µm |
+| Outer diameter (R) | 55 ± 5 µm | 65 ± 5 µm |
+
+→ **`geometry/gem_params.py`の`GEM_50UM`/`GEM_100UM`の数値（pitch=140µm、
+Cu厚=4/9µm、内径=25/35µm、外径=55/65µm、dielectric厚=50/100µm）は
+Table 1の値と完全に一致することを確認**（内径・外径は論文では
+"diameter"表記、コードでは`/2.0`して半径に変換しており、変換も正しい）。
+ただし**論文の±誤差（製造ばらつき、10µm/5µm）はシミュレーションには
+反映されておらず、公称値のみを使用している**点は引き続き注意。
+
+**Fig. 6「A diagram of GEM sample」:** top viewでR(外径)・r(内径)・
+d(pitch)を示す同心円、side viewでR(Cu面)からr(中央ネック)へ絞られる
+台形状の断面が描かれている。**これは現在のシミュレーションで仮定している
+biconical/hourglass形状（Cu面で外径R、誘電体中央でr）と一致する図**。
+ただし、これは論文の模式図(diagram)であり、実際に製造された孔の
+顕微鏡断面写真ではない。
+
+**電場・電圧設定も本文Fig. 5から直接確認**（現在のシミュレーションの
+`SingleGemTestConfig`/`TripleGemTestConfig`デフォルト値と完全一致）:
+drift field 130 V/cm、transfer field 2 kV/cm、induction field 3.1 kV/cm、
+100µm GEMの電圧は50µm GEMの1.5倍(`1.5*VGEM`)、beam testでの実際の
+運用電圧は305V。
+
+**stack順序**: 本文は「two layers of 50-µm thick GEM and one layer of
+100-µm thick GEM **at bottom**」と明記 — つまり実際の論文の並びは
+ドリフト側から50→50→100µmであり、`triple_gem_field_model.py`の
+docstringに既に記載されている「本プロジェクトは100→50→50µmという
+異なる並びを採用している（2026-09-22にユーザー確認済み）」という
+記述が、論文の実際の記述と正しく整合していることも再確認できた。
+
+### まだ確認できていないこと（simulation上の仮定のまま）
+
+- **実際に製造された孔の顕微鏡/SEM断面写真は、この論文には掲載されて
+  いない。** Fig. 6は模式図であり、taperの正確な曲率・形状（真の
+  biconical/hourglassカーブか、それとも異なる形状か）は未確認のまま。
+- **100µm GEMは`laser etching`・LCP基材という、50µm GEM（`wet etching`・
+  polyimide、CERN標準的なGEM製法に近い）とは異なる製法。** レーザー
+  エッチングは化学ウェットエッチングとは異なる断面プロファイルになる
+  可能性があり、本プロジェクトが最も注目しているGEM1（100µm）の実際の
+  taper形状が、50µm GEM（引用文献[4][5]のF. Sauli論文などで広く
+  文書化されている標準的なbiconical形状）と全く同じ前提でよいかは、
+  この論文だけでは確定できない。ただし2026-09-23/24の孔taper感度scan
+  （内径35〜65µmでほぼ結果不変）から、taper形状の細部が主要な結論を
+  左右しない可能性が高いことは別途確認済み。
+- 製造誤差(±10µm/±5µm)の影響（simulationでは公称値のみ使用）。
+
+### 結論
+
+**Table 1の数値とFig. 5の電場設定はプロジェクトのコードと完全に一致
+しており、単なる仮定ではなく論文本文の直接引用であることを確認した。**
+孔のtaper形状（biconical/hourglass）についても、論文自身の模式図
+(Fig. 6)がこれを裏付けている。一方、実際の孔の顕微鏡断面写真や、
+レーザーエッチングされた100µm GEM特有の断面プロファイルについては、
+この論文単独では確認できず、今後さらに文献を辿るか、実機の断面写真を
+入手する必要がある。
+
 ## 現時点の結論と次の一手候補
 
 - 電場の「向き」（仮説1）・「大きさ」（transfer field scan、GEM電圧3倍scan）・
@@ -861,10 +935,20 @@ r_birth解析（3086電子、GEM1内生成）は従来と同じ単調減少パ�
   (2.1%)・GEM3到達3件(0.2%)を初めて統計的に有意な数で確認。67/150
   (44.7%)のイベントでGEM1脱出電子ゼロという極端な分布を確認し、
   Bernoulli独立試行扱いが不適切であることを定量的に裏付け。
-  `analyze_plane_crossings.py`にevent単位breakdown出力を追加）、
-  (vii) 100µm GEM孔形状の文献的な裏付け（現状はKim et al. 2020のTable 1
-  数値をbiconicalと仮定しているだけで、実際の断面写真等では未確認）。
-- `e0`（初期エネルギー）scanは優先度が低いとの調査方針書の判断に従い、まだ未実施。
+  `analyze_plane_crossings.py`にevent単位breakdown出力を追加）。
+  ~~100µm GEM孔形状の文献的な裏付け~~ → 2026-09-24実施済み（論文本文
+  PDFを直接取得しTable 1/Fig. 5/Fig. 6を確認。**確定した結論**:
+  コードの数値(pitch/Cu厚/内外径/電場設定)は論文Table 1・Fig. 5と完全
+  一致、Fig. 6の模式図もbiconical形状を裏付ける。ただし実際の孔の
+  顕微鏡断面写真は論文になく、100µm GEM特有のlaser etching(LCP基材、
+  50µm GEMのwet etching/polyimideとは異なる製法)の実際の断面プロファ
+  イルは依然未確認、というのが最終的な「確認済み事実 vs 仮定」の
+  切り分け）。
+- 残りの優先度リストはこれで一巡した（2026-09-24時点）。今後さらに
+  深掘りする候補: さらに広いタイル化(7x7)、laser-etched 100µm GEMの
+  実際の断面形状に関する追加文献調査、event-level bootstrapの正式実装。
+  `e0`（初期エネルギー）scanは優先度が低いとの調査方針書の判断に従い、
+  まだ未実施。
 
 ## パイプライン構築時に踏んだ落とし穴（Gmsh → Elmer → Garfield++）
 
