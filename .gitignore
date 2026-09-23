@@ -11,3 +11,5 @@ geometry/output/*
 !geometry/output/*.png
 macros/output/*
 !macros/output/*.png
+visualization/output/*
+!visualization/output/*.png
