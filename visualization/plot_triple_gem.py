@@ -12,6 +12,10 @@ not regenerated here):
   - macros/output/<baseName>_field_slice_full.json (macros/export_field_samples.cpp):
     {"nx", "ny", "nz", "samples": [{x,y,z,ex,ey,ez,v,status}, ...]}
     with ny == 1 (a y=0 plane slice) -- see that macro's docstring.
+  - macros/output/<baseName>_avalanche_trajectories.csv
+    (macros/export_avalanche_trajectories.cpp), optional: event,track,x,y,z,
+    t,energy -- one row per recorded drift-line point. Skipped if missing
+    (run export_avalanche_trajectories first to get one).
 
 Usage:
     ~/.conda/envs/work/bin/python3 plot_triple_gem.py [baseName] [output.html]
@@ -106,7 +110,39 @@ def load_field_slice(slice_json_path: str) -> pv.StructuredGrid:
     return grid
 
 
-def build_plotter(mesh_groups: dict[str, pv.PolyData], field_slice: pv.StructuredGrid) -> pv.Plotter:
+def load_trajectories(csv_path: str) -> pv.PolyData | None:
+    """All (event,track) drift lines in one PolyData (one VTK "lines" cell
+    per track), colored by kinetic energy [eV] -- much cheaper to render
+    than adding each track as its own actor when there can be 50+ per event
+    (see export_avalanche_trajectories.cpp)."""
+    data = np.genfromtxt(csv_path, delimiter=",", names=True)
+    if data.ndim == 0:  # a single-row CSV loads as a 0-d structured array
+        data = data.reshape(1)
+    keys = np.unique(np.stack([data["event"], data["track"]], axis=1), axis=0)
+
+    points_chunks, energy_chunks, line_cells = [], [], []
+    offset = 0
+    for event, track in keys:
+        idx = np.nonzero((data["event"] == event) & (data["track"] == track))[0]
+        if idx.size < 2:
+            continue  # a single-point "path" can't be drawn as a line
+        points_chunks.append(np.stack([data["x"][idx], data["y"][idx], data["z"][idx]], axis=1))
+        energy_chunks.append(data["energy"][idx])
+        line_cells.append(np.concatenate([[idx.size], np.arange(offset, offset + idx.size)]))
+        offset += idx.size
+
+    if not points_chunks:
+        return None
+    poly = pv.PolyData(np.vstack(points_chunks), lines=np.concatenate(line_cells))
+    poly["energy [eV]"] = np.concatenate(energy_chunks)
+    return poly
+
+
+def build_plotter(
+    mesh_groups: dict[str, pv.PolyData],
+    field_slice: pv.StructuredGrid,
+    trajectories: pv.PolyData | None = None,
+) -> pv.Plotter:
     pl = pv.Plotter(off_screen=True)
     for name, mesh in mesh_groups.items():
         color, opacity = _style_for_group(name)
@@ -115,6 +151,11 @@ def build_plotter(mesh_groups: dict[str, pv.PolyData], field_slice: pv.Structure
         field_slice, scalars="log10(|E|) [V/cm]", cmap="turbo", opacity=0.6,
         show_scalar_bar=True,
     )
+    if trajectories is not None:
+        pl.add_mesh(
+            trajectories, scalars="energy [eV]", cmap="plasma", line_width=3,
+            render_lines_as_tubes=True, show_scalar_bar=True,
+        )
     pl.add_axes()
     pl.camera_position = "xz"
     return pl
@@ -135,13 +176,23 @@ def main() -> None:
     # macros/output/field_slice_full.json currently belongs to except by
     # re-running export_field_samples for base_name right before this.
     slice_path = os.path.join(MACROS_OUTPUT_DIR, "field_slice_full.json")
+    trajectories_path = os.path.join(MACROS_OUTPUT_DIR, f"{base_name}_avalanche_trajectories.csv")
 
     mesh_groups = load_geometry_meshes(surfaces_path)
     print(f"Loaded {len(mesh_groups)} geometry groups from {surfaces_path}")
     field_slice = load_field_slice(slice_path)
     print(f"Loaded field slice ({field_slice.n_points} points) from {slice_path}")
 
-    pl = build_plotter(mesh_groups, field_slice)
+    trajectories = None
+    if os.path.exists(trajectories_path):
+        trajectories = load_trajectories(trajectories_path)
+        n_pts = trajectories.n_points if trajectories is not None else 0
+        print(f"Loaded avalanche trajectories ({n_pts} points) from {trajectories_path}")
+    else:
+        print(f"No trajectory CSV at {trajectories_path} -- skipping "
+              "(run export_avalanche_trajectories first to include one)")
+
+    pl = build_plotter(mesh_groups, field_slice, trajectories)
     pl.trame.export_html(out_path)
     print(f"Wrote {out_path}")
 
