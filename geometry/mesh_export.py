@@ -1,6 +1,6 @@
 """Export a triangulated surface mesh (by named physical group) to JSON, for
 rendering as an actual solid-looking 3D surface (as opposed to a bare point
-cloud) in the interactive HTML viewer under macros/output/field_viewer.html.
+cloud) in the interactive viewers under visualization/ and geometry/plot_3d_*.py.
 """
 
 import json

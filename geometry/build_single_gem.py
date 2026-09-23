@@ -7,11 +7,11 @@ see README.md's status list for the next milestones.
 
 Usage:
     python3 build_single_gem.py
-Outputs (under geometry/output/):
-    gem_50um_schematic.png          - intended hole cross-section, from parameters only
-    gem_50um_mesh_cross_section.png - meshed hole cross-section, for comparison
-    gem_50um_mesh_overview.png      - 3D overview of the meshed unit cell
-    gem_50um_unit_cell.msh          - the mesh itself
+Outputs (see docs/reference.md "出力ディレクトリ構成" for the full results/ layout):
+    results/img/gem_50um_schematic.png          - intended hole cross-section, from parameters only
+    results/img/gem_50um_mesh_cross_section.png - meshed hole cross-section, for comparison
+    results/img/gem_50um_mesh_overview.png      - 3D overview of the meshed unit cell
+    results/mesh/gem_50um_unit_cell.msh         - the mesh itself
 """
 
 import os
@@ -35,15 +35,21 @@ import gmsh
 from gem_params import GEM_50UM
 from gem_unit_cell import build_gem_layer
 
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
+# results/ is this project's single consolidated output tree -- see
+# docs/reference.md "出力ディレクトリ構成" for what belongs in each subdir.
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RESULTS_DIR = os.path.join(REPO_ROOT, "results")
+MESH_DIR = os.path.join(RESULTS_DIR, "mesh")
+IMG_DIR = os.path.join(RESULTS_DIR, "img")
 
 
 def main() -> None:
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    for d in (MESH_DIR, IMG_DIR):
+        os.makedirs(d, exist_ok=True)
     params = GEM_50UM
 
     # Step 1: sanity-check the input parameters on their own, before any meshing.
-    schematic_path = os.path.join(OUTPUT_DIR, "gem_50um_schematic.png")
+    schematic_path = os.path.join(IMG_DIR, "gem_50um_schematic.png")
     plot_parameter_schematic(params, schematic_path)
     print(f"[1/4] Parameter schematic written to {schematic_path}")
 
@@ -65,7 +71,7 @@ def main() -> None:
     gmsh.option.setNumber("Mesh.MeshSizeMax", 0.003)
     gmsh.model.mesh.generate(3)
 
-    mesh_path = os.path.join(OUTPUT_DIR, "gem_50um_unit_cell.msh")
+    mesh_path = os.path.join(MESH_DIR, "gem_50um_unit_cell.msh")
     gmsh.write(mesh_path)
 
     node_tags, node_coords_flat, _ = gmsh.model.mesh.getNodes()
@@ -78,10 +84,10 @@ def main() -> None:
     )
 
     # Step 4: plot the actual mesh for a visual cross-check against the schematic.
-    cross_section_path = os.path.join(OUTPUT_DIR, "gem_50um_mesh_cross_section.png")
+    cross_section_path = os.path.join(IMG_DIR, "gem_50um_mesh_cross_section.png")
     plot_mesh_cross_section(node_coords, cross_section_path, y_tolerance_cm=0.0005)
 
-    overview_path = os.path.join(OUTPUT_DIR, "gem_50um_mesh_overview.png")
+    overview_path = os.path.join(IMG_DIR, "gem_50um_mesh_overview.png")
     plot_mesh_overview_3d(node_coords, overview_path)
     print(f"[4/4] Mesh check plots written to {cross_section_path} and {overview_path}")
 

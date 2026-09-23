@@ -6,10 +6,10 @@ needs second-order elements, etc.
 
 Usage:
     python3 build_triple_gem_field_mesh.py
-Outputs (under geometry/output/):
-    triple_gem_field.msh              - mesh (Gmsh v2.2 format, for ElmerGrid)
-    triple_gem_field_model_info.json  - electrode potentials + permittivities
-    triple_gem_field_mesh_full.png    - mesh check plot (full z range)
+Outputs (see docs/reference.md "出力ディレクトリ構成" for the full results/ layout):
+    results/mesh/triple_gem_field.msh              - mesh (Gmsh v2.2 format, for ElmerGrid)
+    results/json/triple_gem_field_model_info.json  - electrode potentials + permittivities
+    results/img/triple_gem_field_mesh_full.png     - mesh check plot (full z range)
 """
 
 import json
@@ -28,11 +28,18 @@ from triple_gem_field_model import (
     build_triple_gem_field_model,
 )
 
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
+# results/ is this project's single consolidated output tree -- see
+# docs/reference.md "出力ディレクトリ構成" for what belongs in each subdir.
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RESULTS_DIR = os.path.join(REPO_ROOT, "results")
+MESH_DIR = os.path.join(RESULTS_DIR, "mesh")
+JSON_DIR = os.path.join(RESULTS_DIR, "json")
+IMG_DIR = os.path.join(RESULTS_DIR, "img")
 
 
 def main() -> None:
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    for d in (MESH_DIR, JSON_DIR, IMG_DIR):
+        os.makedirs(d, exist_ok=True)
     config = TripleGemTestConfig()
 
     gmsh.initialize()
@@ -52,7 +59,7 @@ def main() -> None:
     gmsh.option.setNumber("Mesh.MeshSizeMax", 0.02)
     gmsh.model.mesh.generate(3)
 
-    surfaces_path = os.path.join(OUTPUT_DIR, "triple_gem_field_mesh_surfaces.json")
+    surfaces_path = os.path.join(JSON_DIR, "triple_gem_field_mesh_surfaces.json")
     export_surface_groups_json(surface_groups, surfaces_path)
     print(f"      Surface mesh for 3D viewer written to {surfaces_path}")
 
@@ -64,17 +71,17 @@ def main() -> None:
     print(f"[2/3] Mesh generated: {len(node_tags)} nodes, {n_tets} tetrahedra")
 
     gmsh.option.setNumber("Mesh.MshFileVersion", 2.2)
-    mesh_path = os.path.join(OUTPUT_DIR, "triple_gem_field.msh")
+    mesh_path = os.path.join(MESH_DIR, "triple_gem_field.msh")
     gmsh.write(mesh_path)
 
     node_coords = np.array(node_coords_flat).reshape(-1, 3)
-    full_range_path = os.path.join(OUTPUT_DIR, "triple_gem_field_mesh_full.png")
+    full_range_path = os.path.join(IMG_DIR, "triple_gem_field_mesh_full.png")
     plot_mesh_cross_section(node_coords, full_range_path, y_tolerance_cm=0.0005, equal_aspect=False)
     print(f"[3/3] Mesh written to {mesh_path}; plot: {full_range_path}")
 
     gmsh.finalize()
 
-    model_info_path = os.path.join(OUTPUT_DIR, "triple_gem_field_model_info.json")
+    model_info_path = os.path.join(JSON_DIR, "triple_gem_field_model_info.json")
     with open(model_info_path, "w") as f:
         json.dump(
             {

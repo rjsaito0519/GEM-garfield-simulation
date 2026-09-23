@@ -5,11 +5,15 @@
  * macros stop re-hardcoding them (see docs/debugging_notes.md for why that
  * duplication was a problem).
  *
- * That file lives one directory *above* the mesh/result directory the
- * macros take as argv[1] (e.g. geometry/output/triple_gem_field_model_info.json
- * next to the geometry/output/triple_gem_field/ mesh dir, both written by
- * geometry/build_triple_gem_field_mesh.py) -- not inside it, since ElmerGrid
- * owns the contents of the mesh/result directory itself.
+ * Under this project's results/ layout (see docs/reference.md), the mesh/
+ * result directory macros take as argv[1] is results/mesh/<baseName>/, and
+ * the model info JSON is a *sibling subdirectory* of that: results/json/
+ * <baseName>_model_info.json. Both are two levels below the mesh dir's
+ * parent (results/mesh/<baseName> -> results/mesh -> results), so this
+ * goes up two levels then down into json/, not just one -- that tripped
+ * this exact function up once already when results/ didn't exist yet and
+ * model info sat directly next to the mesh dir (one level up); keep this
+ * comment in sync if that layout ever changes again.
  */
 
 #pragma once
@@ -37,8 +41,10 @@ struct ModelGeometryInfo {
 // std::filesystem::path(argv[1]).filename().string().
 inline ModelGeometryInfo LoadModelGeometryInfo(const std::string& meshDirArg,
                                                 const std::string& baseName) {
+  const std::filesystem::path resultsDir =
+      std::filesystem::path(meshDirArg).parent_path().parent_path();
   const std::filesystem::path path =
-      std::filesystem::path(meshDirArg).parent_path() / (baseName + "_model_info.json");
+      resultsDir / "json" / (baseName + "_model_info.json");
   std::ifstream in(path);
   if (!in) {
     throw std::runtime_error("Could not open model info file: " + path.string());

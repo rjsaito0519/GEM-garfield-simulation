@@ -1,14 +1,15 @@
 """Quick 3D checks of the single-GEM geometry/field using matplotlib only --
 no browser needed. Reuses the JSON data already written by
-build_single_gem_field_mesh.py (geometry/output/) and
-export_field_samples (macros/output/), so run those first.
+build_single_gem_field_mesh.py and export_field_samples, both under
+results/json/ (see docs/reference.md "出力ディレクトリ構成"), so run those
+first.
 
 Usage:
     python3 plot_3d_matplotlib.py geometry [--show]
     python3 plot_3d_matplotlib.py vectors [--zoom] [--show]
     python3 plot_3d_matplotlib.py slice [--zoom] [--show]
 
-Without --show, each command saves a PNG under geometry/output/ and exits --
+Without --show, each command saves a PNG under results/img/ and exits --
 safe to run over SSH with no display. With --show, it opens an interactive
 matplotlib window instead (needs a working display, e.g. X11 forwarding, or
 run the same functions directly in a Jupyter cell for inline interactivity).
@@ -25,8 +26,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-GEOMETRY_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
-MACROS_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "macros", "output")
+# results/ is this project's single consolidated output tree -- see
+# docs/reference.md "出力ディレクトリ構成" for what belongs in each subdir.
+_RESULTS_DIR = os.path.join(os.path.dirname(__file__), "..", "results")
+JSON_DIR = os.path.join(_RESULTS_DIR, "json")
+IMG_DIR = os.path.join(_RESULTS_DIR, "img")
 CM_TO_UM = 1.0e4
 
 GROUP_COLORS = {
@@ -53,7 +57,7 @@ def _finish(fig, output_path: str, show: bool) -> None:
 
 def plot_geometry_3d(show: bool = False) -> None:
     """Render the GEM foil as real triangulated surfaces (Cu + dielectric)."""
-    with open(os.path.join(GEOMETRY_OUTPUT_DIR, "single_gem_field_mesh_surfaces.json")) as f:
+    with open(os.path.join(JSON_DIR, "single_gem_field_mesh_surfaces.json")) as f:
         mesh = json.load(f)
     vertices = np.array(mesh["vertices"]) * CM_TO_UM
 
@@ -92,13 +96,13 @@ def plot_geometry_3d(show: bool = False) -> None:
     ax.set_zlabel("z [um]")
     ax.set_title("GEM foil: Cu (copper) + dielectric hole surfaces")
     fig.tight_layout()
-    _finish(fig, os.path.join(GEOMETRY_OUTPUT_DIR, "mpl_geometry_3d.png"), show)
+    _finish(fig, os.path.join(IMG_DIR, "mpl_geometry_3d.png"), show)
 
 
 def plot_vectors_3d(zoom: bool = False, show: bool = False) -> None:
     """3D quiver plot of the E field: arrow direction + log-magnitude color."""
     name = "field_vectors_zoom.json" if zoom else "field_vectors_full.json"
-    with open(os.path.join(MACROS_OUTPUT_DIR, name)) as f:
+    with open(os.path.join(JSON_DIR, name)) as f:
         data = json.load(f)
     # status != -6 excludes points outside the meshed domain; the magnitude
     # check separately excludes points *inside* solid copper, where E is
@@ -133,13 +137,13 @@ def plot_vectors_3d(zoom: bool = False, show: bool = False) -> None:
     fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, shrink=0.6, label="log10|E|")
     fig.tight_layout()
     suffix = "zoom" if zoom else "full"
-    _finish(fig, os.path.join(GEOMETRY_OUTPUT_DIR, f"mpl_vectors_3d_{suffix}.png"), show)
+    _finish(fig, os.path.join(IMG_DIR, f"mpl_vectors_3d_{suffix}.png"), show)
 
 
 def plot_slice_3d(zoom: bool = False, show: bool = False) -> None:
     """The y=0 potential slice as a flat colored surface positioned in 3D."""
     name = "field_slice_zoom.json" if zoom else "field_slice_full.json"
-    with open(os.path.join(MACROS_OUTPUT_DIR, name)) as f:
+    with open(os.path.join(JSON_DIR, name)) as f:
         data = json.load(f)
     nx, nz = data["nx"], data["nz"]
     samples = data["samples"]
@@ -173,7 +177,7 @@ def plot_slice_3d(zoom: bool = False, show: bool = False) -> None:
     fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, shrink=0.6, label="V [Volt]")
     fig.tight_layout()
     suffix = "zoom" if zoom else "full"
-    _finish(fig, os.path.join(GEOMETRY_OUTPUT_DIR, f"mpl_slice_3d_{suffix}.png"), show)
+    _finish(fig, os.path.join(IMG_DIR, f"mpl_slice_3d_{suffix}.png"), show)
 
 
 def main() -> None:

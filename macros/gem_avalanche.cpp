@@ -4,11 +4,14 @@
  * injection point need to match whichever model is being run). Injects
  * electrons near the hole axis, above the topmost GEM foil, in the drift
  * gas, and reports the resulting total gain (number of secondary
- * electrons) after passing through the whole field map. Also writes a
- * per-electron-endpoint CSV ("<baseName>_avalanche_endpoints.csv" in the
- * output dir: event,xs,ys,zs,ts,es,xe,ye,ze,te,ee,status) so where each
- * electron's drift line actually ended can be examined directly, not just
- * lumped into the printed status tally.
+ * electrons) after passing through the whole field map. Also writes an
+ * "Endpoints" TTree (event,xs,ys,zs,ts,es,xe,ye,ze,te,ee,status) to
+ * "<baseName>_avalanche.root" in the output dir, so where each electron's
+ * drift line actually ended can be examined directly, not just lumped into
+ * the printed status tally. Opened in UPDATE mode and any existing
+ * "Endpoints" cycles purged first, so re-running this macro replaces its
+ * own tree without disturbing a sibling "Trajectories" tree that
+ * export_avalanche_trajectories.cpp may have written to the same file.
  *
  * The mesh/result base name is taken from the last path component of the
  * mesh directory (e.g. "single_gem_field" or "triple_gem_field"), matching
@@ -16,7 +19,8 @@
  *
  * Usage: gem_avalanche <mesh/result dir> <.gas file> <n events>
  *                       <zSensorMin> <zSensorMax> <zInjection>
- *                       <xHalfCm> <yHalfCm> [e0_eV] [injectionRadiusCm] [output dir]
+ *                       <xHalfCm> <yHalfCm> [e0_eV] [injectionRadiusCm]
+ *                       [rootOutDir] [imgOutDir]
  *   zSensorMin/Max: the sensor's z bounds [cm], from the induction/transfer
  *     plane at the bottom to the drift plane at the top (see the model's
  *     printed electrode potentials, or its mesh cross-section plot, for
@@ -29,6 +33,9 @@
  *   e0_eV: initial electron energy [eV], default 0.1 (roughly thermal).
  *   injectionRadiusCm: each electron's (x, y) is offset from the hole axis
  *     by a random radius in [0, injectionRadiusCm], default 0.0005 cm (5 um).
+ *   rootOutDir/imgOutDir: where to write the .root file / the drift-lines
+ *     PNG (e.g. results/root and results/img -- see docs/reference.md
+ *     "出力ディレクトリ構成"). imgOutDir defaults to rootOutDir if omitted.
  */
 
 #include <cmath>
@@ -40,7 +47,9 @@
 
 #include <TApplication.h>
 #include <TCanvas.h>
+#include <TFile.h>
 #include <TROOT.h>
+#include <TTree.h>
 
 #include "Garfield/AvalancheMicroscopic.hh"
 #include "Garfield/ComponentElmer.hh"
@@ -55,7 +64,7 @@ int main(int argc, char* argv[]) {
   if (argc < 9) {
     std::cout << "Usage: gem_avalanche <mesh/result dir> <.gas file> <n events> "
                  "<zSensorMin> <zSensorMax> <zInjection> <xHalfCm> <yHalfCm> "
-                 "[output dir]\n";
+                 "[e0_eV] [injectionRadiusCm] [rootOutDir] [imgOutDir]\n";
     return 1;
   }
   const std::string meshDir = std::string(argv[1]) + "/";
@@ -69,7 +78,12 @@ int main(int argc, char* argv[]) {
   const double yHalfCm = std::stod(argv[8]);
   const double e0 = argc > 9 ? std::stod(argv[9]) : 0.1;
   const double injectionRadiusCm = argc > 10 ? std::stod(argv[10]) : 0.0005;
-  const std::string outDir = argc > 11 ? std::string(argv[11]) + "/" : "./";
+  // Two separate output dirs since this macro writes both a ROOT file and
+  // a PNG (results/root/ and results/img/ respectively -- see
+  // docs/reference.md "出力ディレクトリ構成"); imgOutDir falls back to
+  // rootOutDir if not given, so old single-output-dir invocations still work.
+  const std::string rootOutDir = argc > 11 ? std::string(argv[11]) + "/" : "./";
+  const std::string imgOutDir = argc > 12 ? std::string(argv[12]) + "/" : rootOutDir;
 
   // Must come *before* constructing TApplication: otherwise TApplication's
   // own construction tries to connect to the X11 display named by $DISPLAY,
@@ -115,15 +129,30 @@ int main(int argc, char* argv[]) {
 
   const double t0 = 0.;
 
-  // Per-electron-endpoint CSV: which (x,y,z) each secondary electron's
+  // Per-electron-endpoint TTree: which (x,y,z) each secondary electron's
   // drift line actually ended at, not just its status code -- needed to
   // tell "hit the hole wall partway down" apart from "hit the bottom
   // copper" apart from "made it into the transfer gap but got lost later",
   // all of which show up as the same StatusLeftDriftMedium(-5) in the
   // tally below. See docs/debugging_notes.md.
-  const std::string endpointsPath = outDir + baseName + "_avalanche_endpoints.csv";
-  std::ofstream endpointsCsv(endpointsPath);
-  endpointsCsv << "event,xs,ys,zs,ts,es,xe,ye,ze,te,ee,status\n";
+  const std::string rootPath = rootOutDir + baseName + "_avalanche.root";
+  TFile* rootFile = TFile::Open(rootPath.c_str(), "UPDATE");
+  rootFile->Delete("Endpoints;*");
+  TTree endpointsTree("Endpoints", "Per-electron-endpoint avalanche data");
+  int b_event, b_status;
+  double b_xs, b_ys, b_zs, b_ts, b_es, b_xe, b_ye, b_ze, b_te, b_ee;
+  endpointsTree.Branch("event", &b_event);
+  endpointsTree.Branch("xs", &b_xs);
+  endpointsTree.Branch("ys", &b_ys);
+  endpointsTree.Branch("zs", &b_zs);
+  endpointsTree.Branch("ts", &b_ts);
+  endpointsTree.Branch("es", &b_es);
+  endpointsTree.Branch("xe", &b_xe);
+  endpointsTree.Branch("ye", &b_ye);
+  endpointsTree.Branch("ze", &b_ze);
+  endpointsTree.Branch("te", &b_te);
+  endpointsTree.Branch("ee", &b_ee);
+  endpointsTree.Branch("status", &b_status);
 
   std::vector<int> gains;
   std::map<int, int> endpointStatusCounts;
@@ -162,13 +191,16 @@ int main(int argc, char* argv[]) {
       int status;
       aval.GetElectronEndpoint(j, xs, ys, zs, ts, es, xe, ye, ze, te, ee, status);
       endpointStatusCounts[status]++;
-      endpointsCsv << i << "," << xs << "," << ys << "," << zs << "," << ts << ","
-                   << es << "," << xe << "," << ye << "," << ze << "," << te << ","
-                   << ee << "," << status << "\n";
+      b_event = i;
+      b_xs = xs; b_ys = ys; b_zs = zs; b_ts = ts; b_es = es;
+      b_xe = xe; b_ye = ye; b_ze = ze; b_te = te; b_ee = ee;
+      b_status = status;
+      endpointsTree.Fill();
     }
   }
-  endpointsCsv.close();
-  std::cout << "Wrote per-endpoint data to " << endpointsPath << "\n";
+  endpointsTree.Write();
+  rootFile->Close();
+  std::cout << "Wrote per-endpoint data to " << rootPath << " (tree \"Endpoints\")\n";
 
   std::cout << "Electron endpoint status tally (StatusLeftDriftArea=-1, "
                "StatusLeftDriftMedium=-5, StatusOutsideMesh=-6, other=see "
@@ -190,7 +222,7 @@ int main(int argc, char* argv[]) {
   TCanvas canvas("c", "Drift lines", 800, 800);
   driftView.SetCanvas(&canvas);
   driftView.Plot();
-  const std::string plotPath = outDir + baseName + "_avalanche_drift_lines.png";
+  const std::string plotPath = imgOutDir + baseName + "_avalanche_drift_lines.png";
   canvas.SaveAs(plotPath.c_str());
   std::cout << "Wrote " << plotPath << "\n";
 

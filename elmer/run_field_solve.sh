@@ -5,14 +5,15 @@
 # Usage: run_field_solve.sh [mesh_name]
 #   mesh_name defaults to single_gem_field; pass triple_gem_field for the
 #   3-GEM stack. Assumes geometry/build_<mesh_name>.py has already been run
-#   (it writes geometry/output/<mesh_name>.msh and *_model_info.json).
+#   (it writes results/mesh/<mesh_name>.msh and results/json/*_model_info.json
+#   -- see docs/reference.md "出力ディレクトリ構成").
 #
 # Elmer's env vars are set here explicitly rather than relying on ~/.bashrc,
 # which no longer exports them by default (see README.md "実行環境").
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUTPUT_DIR="$SCRIPT_DIR/../geometry/output"
+OUTPUT_DIR="$SCRIPT_DIR/../results/mesh"
 MESH_NAME="${1:-single_gem_field}"
 
 export ELMER_HOME="$HOME/elmer"

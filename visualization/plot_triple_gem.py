@@ -6,34 +6,32 @@ building it works fine off-screen since PyVista never actually rasterizes
 for this export path).
 
 Inputs (already produced by the existing Gmsh/Elmer/Garfield++ pipeline,
-not regenerated here):
-  - geometry/output/<baseName>_mesh_surfaces.json (geometry/mesh_export.py):
+not regenerated here; see docs/reference.md "出力ディレクトリ構成"):
+  - results/json/<baseName>_mesh_surfaces.json (geometry/mesh_export.py):
     {"vertices": [[x,y,z], ...], "groups": {name: [i,j,k, i,j,k, ...]}}
-  - macros/output/<baseName>_field_slice_full.json (macros/export_field_samples.cpp):
+  - results/json/field_slice_full.json (macros/export_field_samples.cpp):
     {"nx", "ny", "nz", "samples": [{x,y,z,ex,ey,ez,v,status}, ...]}
     with ny == 1 (a y=0 plane slice) -- see that macro's docstring.
-  - macros/output/<baseName>_avalanche_trajectories.csv
-    (macros/export_avalanche_trajectories.cpp), optional: event,track,x,y,z,
-    t,energy -- one row per recorded drift-line point. Skipped if missing
-    (run export_avalanche_trajectories first to get one).
-  - macros/output/field_vectors_full.json (macros/export_field_samples.cpp):
+  - results/root/<baseName>_avalanche.root, tree "Trajectories"
+    (macros/export_avalanche_trajectories.cpp), optional: branches
+    event,track,x,y,z,t,energy -- one entry per recorded drift-line point.
+    Skipped if the file/tree doesn't exist (run export_avalanche_trajectories
+    first to get one).
+  - results/json/field_vectors_full.json (macros/export_field_samples.cpp):
     same {"nx","ny","nz","samples"} schema as the slice file, but a genuine
     3D grid (ny > 1) -- used to seed E-field streamlines through the hole.
     Same baseName-prefix caveat as the slice file (see slice_path below).
 
 Usage:
-    ~/.conda/envs/work/bin/python3 plot_triple_gem.py [baseName] [output.html]
+    python3 plot_triple_gem.py [baseName] [output.html]
     baseName defaults to "triple_gem_field"; output defaults to
-    visualization/output/<baseName>_overview.html.
+    results/html/<baseName>_overview.html.
 
-Environment note: this project's default `python3` (the envfs-cached copy
-of the `work` conda env, see README.md "実行環境") lags behind newly
-pip-installed packages until `~/local/bin/envfs.sh repack work` is rerun --
-use `~/.conda/envs/work/bin/python3` directly (the real env) until then.
-Also: this environment's `vtk` pip wheel must be 9.3.x, not the newest
-9.7.x -- a real trame_vtk/vtk 9.7 incompatibility (TypeError: unhashable
-type 'VTKAOSArray_vtkFloatArray' inside trame_vtk's scene serializer) broke
-HTML export; downgrading to vtk==9.3.1 fixed it (2026-09-23).
+Environment note: this environment's `vtk` pip wheel must be 9.3.x, not the
+newest 9.7.x -- a real trame_vtk/vtk 9.7 incompatibility (TypeError:
+unhashable type 'VTKAOSArray_vtkFloatArray' inside trame_vtk's scene
+serializer) broke HTML export; downgrading to vtk==9.3.1 fixed it
+(2026-09-23, see ~/local/envfs_README.md).
 """
 
 import json
@@ -42,11 +40,15 @@ import sys
 
 import numpy as np
 import pyvista as pv
+import uproot
 
+# results/ is this project's single consolidated output tree -- see
+# docs/reference.md "出力ディレクトリ構成" for what belongs in each subdir.
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GEOMETRY_OUTPUT_DIR = os.path.join(REPO_ROOT, "geometry", "output")
-MACROS_OUTPUT_DIR = os.path.join(REPO_ROOT, "macros", "output")
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
+RESULTS_DIR = os.path.join(REPO_ROOT, "results")
+JSON_DIR = os.path.join(RESULTS_DIR, "json")
+ROOT_DIR = os.path.join(RESULTS_DIR, "root")
+HTML_DIR = os.path.join(RESULTS_DIR, "html")
 
 # Group-name suffix -> (color, opacity). DielectricSurface is checked before
 # the *CopperElectrode suffixes since e.g. "GEM1_DielectricSurface" would
@@ -160,24 +162,28 @@ def compute_streamlines(
     )
 
 
-def load_trajectories(csv_path: str) -> pv.PolyData | None:
+def load_trajectories(root_path: str) -> pv.PolyData | None:
     """All (event,track) drift lines in one PolyData (one VTK "lines" cell
     per track), colored by kinetic energy [eV] -- much cheaper to render
     than adding each track as its own actor when there can be 50+ per event
-    (see export_avalanche_trajectories.cpp)."""
-    data = np.genfromtxt(csv_path, delimiter=",", names=True)
-    if data.ndim == 0:  # a single-row CSV loads as a 0-d structured array
-        data = data.reshape(1)
-    keys = np.unique(np.stack([data["event"], data["track"]], axis=1), axis=0)
+    (see export_avalanche_trajectories.cpp's "Trajectories" tree)."""
+    with uproot.open(root_path) as f:
+        arrays = f["Trajectories"].arrays(
+            ["event", "track", "x", "y", "z", "energy"], library="np"
+        )
+    event, track = arrays["event"], arrays["track"]
+    keys = np.unique(np.stack([event, track], axis=1), axis=0)
 
     points_chunks, energy_chunks, line_cells = [], [], []
     offset = 0
-    for event, track in keys:
-        idx = np.nonzero((data["event"] == event) & (data["track"] == track))[0]
+    for ev, tr in keys:
+        idx = np.nonzero((event == ev) & (track == tr))[0]
         if idx.size < 2:
             continue  # a single-point "path" can't be drawn as a line
-        points_chunks.append(np.stack([data["x"][idx], data["y"][idx], data["z"][idx]], axis=1))
-        energy_chunks.append(data["energy"][idx])
+        points_chunks.append(
+            np.stack([arrays["x"][idx], arrays["y"][idx], arrays["z"][idx]], axis=1)
+        )
+        energy_chunks.append(arrays["energy"][idx])
         line_cells.append(np.concatenate([[idx.size], np.arange(offset, offset + idx.size)]))
         offset += idx.size
 
@@ -214,24 +220,31 @@ def build_plotter(
     return pl
 
 
+def _has_tree(root_path: str, tree_name: str) -> bool:
+    if not os.path.exists(root_path):
+        return False
+    with uproot.open(root_path) as f:
+        return tree_name in f
+
+
 def main() -> None:
     base_name = sys.argv[1] if len(sys.argv) > 1 else "triple_gem_field"
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    default_out = os.path.join(OUTPUT_DIR, f"{base_name}_overview.html")
+    os.makedirs(HTML_DIR, exist_ok=True)
+    default_out = os.path.join(HTML_DIR, f"{base_name}_overview.html")
     out_path = sys.argv[2] if len(sys.argv) > 2 else default_out
 
-    surfaces_path = os.path.join(GEOMETRY_OUTPUT_DIR, f"{base_name}_mesh_surfaces.json")
+    surfaces_path = os.path.join(JSON_DIR, f"{base_name}_mesh_surfaces.json")
     # NOTE: export_field_samples.cpp does NOT prefix its output files with
     # baseName (unlike everything else in this pipeline) -- it always
     # writes plain "field_slice_full.json" etc. into whatever output dir
     # was passed on its command line. Re-running it for a different model
     # overwrites the previous one; there is no way here to tell which model
-    # macros/output/field_slice_full.json currently belongs to except by
+    # results/json/field_slice_full.json currently belongs to except by
     # re-running export_field_samples for base_name right before this.
-    slice_path = os.path.join(MACROS_OUTPUT_DIR, "field_slice_full.json")
-    vectors_path = os.path.join(MACROS_OUTPUT_DIR, "field_vectors_full.json")
-    trajectories_path = os.path.join(MACROS_OUTPUT_DIR, f"{base_name}_avalanche_trajectories.csv")
-    model_info_path = os.path.join(GEOMETRY_OUTPUT_DIR, f"{base_name}_model_info.json")
+    slice_path = os.path.join(JSON_DIR, "field_slice_full.json")
+    vectors_path = os.path.join(JSON_DIR, "field_vectors_full.json")
+    trajectories_path = os.path.join(ROOT_DIR, f"{base_name}_avalanche.root")
+    model_info_path = os.path.join(JSON_DIR, f"{base_name}_model_info.json")
 
     mesh_groups = load_geometry_meshes(surfaces_path)
     print(f"Loaded {len(mesh_groups)} geometry groups from {surfaces_path}")
@@ -239,12 +252,12 @@ def main() -> None:
     print(f"Loaded field slice ({field_slice.n_points} points) from {slice_path}")
 
     trajectories = None
-    if os.path.exists(trajectories_path):
+    if _has_tree(trajectories_path, "Trajectories"):
         trajectories = load_trajectories(trajectories_path)
         n_pts = trajectories.n_points if trajectories is not None else 0
         print(f"Loaded avalanche trajectories ({n_pts} points) from {trajectories_path}")
     else:
-        print(f"No trajectory CSV at {trajectories_path} -- skipping "
+        print(f"No \"Trajectories\" tree at {trajectories_path} -- skipping "
               "(run export_avalanche_trajectories first to include one)")
 
     streamlines = None

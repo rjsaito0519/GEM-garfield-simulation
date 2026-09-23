@@ -6,9 +6,11 @@ docs/debugging_notes.md for the open GEM1->GEM2 transmission problem this
 is investigating.
 
 Usage:
-    python3 plot_avalanche_endpoints.py <endpoints.csv> [output_dir]
-Input: the CSV written by macros/gem_avalanche
-       (event,xs,ys,zs,ts,es,xe,ye,ze,te,ee,status).
+    python3 plot_avalanche_endpoints.py <avalanche.root> [output_dir]
+    output_dir defaults to results/img/ (see docs/reference.md
+    "出力ディレクトリ構成").
+Input: the "Endpoints" tree written by macros/gem_avalanche to
+       "<baseName>_avalanche.root" (event,xs,ys,zs,ts,es,xe,ye,ze,te,ee,status).
 """
 
 import math
@@ -19,8 +21,11 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import uproot
 
 from triple_gem_field_model import TripleGemTestConfig, _layer_z_centers, _half_extent_cm
+
+IMG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results", "img")
 
 # GEM z-boundaries, for annotating the plots -- see triple_gem_field_model.py.
 _CONFIG = TripleGemTestConfig()
@@ -63,12 +68,16 @@ def _hole_radius_at_z(z_cm: float) -> float | None:
 
 def main() -> None:
     if len(sys.argv) < 2:
-        print("Usage: plot_avalanche_endpoints.py <endpoints.csv> [output_dir]")
+        print("Usage: plot_avalanche_endpoints.py <avalanche.root> [output_dir]")
         sys.exit(1)
-    csv_path = sys.argv[1]
-    out_dir = sys.argv[2] if len(sys.argv) > 2 else os.path.dirname(csv_path) or "."
+    root_path = sys.argv[1]
+    out_dir = sys.argv[2] if len(sys.argv) > 2 else IMG_DIR
+    os.makedirs(out_dir, exist_ok=True)
 
-    data = np.genfromtxt(csv_path, delimiter=",", names=True)
+    with uproot.open(root_path) as f:
+        data = f["Endpoints"].arrays(
+            ["xe", "ye", "ze", "status"], library="np"
+        )
     xe, ye, ze, status = data["xe"], data["ye"], data["ze"], data["status"]
     re = np.sqrt(xe**2 + ye**2)
 

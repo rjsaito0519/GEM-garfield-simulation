@@ -23,7 +23,7 @@ list(APPEND CMAKE_PREFIX_PATH "$ENV{HOME}/local/garfield" "$ENV{HOME}/local/root
 set(ROOT_DIR "$ENV{HOME}/local/root/6.40.04/cmake" CACHE PATH "" FORCE)
 
 find_package(Garfield REQUIRED)
-find_package(ROOT REQUIRED COMPONENTS Core RIO Gui Geom Graf Graf3d Gpad Hist Matrix MathCore)
+find_package(ROOT REQUIRED COMPONENTS Core RIO Tree Gui Geom Graf Graf3d Gpad Hist Matrix MathCore)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -39,7 +39,7 @@ function(add_gem_macro name)
     )
     target_link_libraries(${name} PRIVATE
         Garfield::Garfield
-        ROOT::Core ROOT::RIO ROOT::Gui ROOT::Geom ROOT::Graf ROOT::Graf3d ROOT::Gpad ROOT::Hist ROOT::Matrix ROOT::MathCore
+        ROOT::Core ROOT::RIO ROOT::Tree ROOT::Gui ROOT::Geom ROOT::Graf ROOT::Graf3d ROOT::Gpad ROOT::Hist ROOT::Matrix ROOT::MathCore
     )
 endfunction()
 

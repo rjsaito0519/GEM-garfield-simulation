@@ -21,7 +21,14 @@ import os
 import re
 import sys
 
-GEOMETRY_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "geometry", "output")
+# results/ is this project's single consolidated output tree -- see
+# docs/reference.md "出力ディレクトリ構成" for what belongs in each subdir.
+# mesh.names/dielectrics.dat/.sif live in the ElmerGrid-created MESH_DIR
+# subdirectory; model_info.json is a sibling under JSON_DIR, not the same
+# directory (unlike this project's original geometry/output/ layout).
+REPO_ROOT = os.path.join(os.path.dirname(__file__), "..")
+MESH_DIR = os.path.join(REPO_ROOT, "results", "mesh")
+JSON_DIR = os.path.join(REPO_ROOT, "results", "json")
 
 
 def write_dielectrics_dat(
@@ -167,14 +174,14 @@ def main() -> None:
         sys.exit(1)
     mesh_name = sys.argv[1]
 
-    model_info_path = os.path.join(GEOMETRY_OUTPUT_DIR, f"{mesh_name}_model_info.json")
+    model_info_path = os.path.join(JSON_DIR, f"{mesh_name}_model_info.json")
     with open(model_info_path) as f:
         model_info = json.load(f)
 
-    mesh_names_path = os.path.join(GEOMETRY_OUTPUT_DIR, mesh_name, "mesh.names")
+    mesh_names_path = os.path.join(MESH_DIR, mesh_name, "mesh.names")
     body_ids, boundary_ids = parse_mesh_names(mesh_names_path)
 
-    dielectrics_path = os.path.join(GEOMETRY_OUTPUT_DIR, mesh_name, "dielectrics.dat")
+    dielectrics_path = os.path.join(MESH_DIR, mesh_name, "dielectrics.dat")
     body_permittivities = {
         "Gas": 1.0,
         "Dielectric": model_info["dielectric_relative_permittivity"],
@@ -186,7 +193,7 @@ def main() -> None:
     sif_text = build_sif_text(
         mesh_name, body_ids, boundary_ids, body_permittivities, model_info["electrode_potentials_v"]
     )
-    output_path = os.path.join(GEOMETRY_OUTPUT_DIR, f"{mesh_name}.sif")
+    output_path = os.path.join(MESH_DIR, f"{mesh_name}.sif")
     with open(output_path, "w") as f:
         f.write(sif_text)
     print(f"Wrote {output_path}. Body IDs: {body_ids}, boundary IDs: {boundary_ids}")

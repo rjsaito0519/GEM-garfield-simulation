@@ -3,10 +3,11 @@ gas gaps, ready to be handed to ElmerGrid/ElmerSolver.
 
 Usage:
     python3 build_single_gem_field_mesh.py
-Outputs (under geometry/output/):
-    single_gem_field.msh              - mesh (Gmsh v2.2 format, for ElmerGrid)
-    single_gem_field_model_info.json  - electrode potentials + permittivities, for the .sif writer
-    single_gem_field_mesh_full.png / _mesh_gem_zoom.png - mesh check plots
+Outputs (see docs/reference.md "出力ディレクトリ構成" for the full results/ layout):
+    results/mesh/single_gem_field.msh              - mesh (Gmsh v2.2 format, for ElmerGrid)
+    results/json/single_gem_field_model_info.json  - electrode potentials + permittivities, for the .sif writer
+    results/json/single_gem_field_mesh_surfaces.json - flat-triangle surface mesh, for the 3D viewer
+    results/img/single_gem_field_mesh_full.png / _mesh_gem_zoom.png - mesh check plots
 """
 
 import json
@@ -28,17 +29,24 @@ from single_gem_field_model import (
     build_single_gem_field_model,
 )
 
-# Surface groups to export for the interactive 3D viewer (macros/output/field_viewer.html).
+# Surface groups to export for the interactive 3D viewer.
 SURFACE_GROUPS_FOR_3D_VIEWER = [
     "TopCopperElectrode", "BottomCopperElectrode", "DielectricSurface",
     "DriftPlaneElectrode", "TransferPlaneElectrode",
 ]
 
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
+# results/ is this project's single consolidated output tree -- see
+# docs/reference.md "出力ディレクトリ構成" for what belongs in each subdir.
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RESULTS_DIR = os.path.join(REPO_ROOT, "results")
+MESH_DIR = os.path.join(RESULTS_DIR, "mesh")
+JSON_DIR = os.path.join(RESULTS_DIR, "json")
+IMG_DIR = os.path.join(RESULTS_DIR, "img")
 
 
 def main() -> None:
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    for d in (MESH_DIR, JSON_DIR, IMG_DIR):
+        os.makedirs(d, exist_ok=True)
     params = GEM_50UM
     test_config = SingleGemTestConfig()
 
@@ -60,7 +68,7 @@ def main() -> None:
     # Export flat (first-order) surface triangles for the 3D viewer *before*
     # upgrading to second-order elements below -- Elmer/Garfield++ need
     # 10-node tets, but this export wants plain 3-node triangles.
-    surfaces_path = os.path.join(OUTPUT_DIR, "single_gem_field_mesh_surfaces.json")
+    surfaces_path = os.path.join(JSON_DIR, "single_gem_field_mesh_surfaces.json")
     surface_group_ids = {
         name: field_model.physical_group_ids[name] for name in SURFACE_GROUPS_FOR_3D_VIEWER
     }
@@ -80,19 +88,19 @@ def main() -> None:
 
     # ElmerGrid expects the older Gmsh v2.2 ASCII format.
     gmsh.option.setNumber("Mesh.MshFileVersion", 2.2)
-    mesh_path = os.path.join(OUTPUT_DIR, "single_gem_field.msh")
+    mesh_path = os.path.join(MESH_DIR, "single_gem_field.msh")
     gmsh.write(mesh_path)
 
     node_coords = np.array(node_coords_flat).reshape(-1, 3)
 
-    full_range_path = os.path.join(OUTPUT_DIR, "single_gem_field_mesh_full.png")
+    full_range_path = os.path.join(IMG_DIR, "single_gem_field_mesh_full.png")
     plot_mesh_cross_section(
         node_coords, full_range_path, y_tolerance_cm=0.0005, equal_aspect=False
     )
 
     half_t_diel = params.dielectric_thickness_cm / 2.0
     z_gem_edge = half_t_diel + params.copper_thickness_cm
-    zoom_path = os.path.join(OUTPUT_DIR, "single_gem_field_mesh_gem_zoom.png")
+    zoom_path = os.path.join(IMG_DIR, "single_gem_field_mesh_gem_zoom.png")
     plot_mesh_cross_section(
         node_coords, zoom_path, y_tolerance_cm=0.0005,
         z_range_cm=(-z_gem_edge - 0.0005, z_gem_edge + 0.0005),
@@ -101,7 +109,7 @@ def main() -> None:
 
     gmsh.finalize()
 
-    model_info_path = os.path.join(OUTPUT_DIR, "single_gem_field_model_info.json")
+    model_info_path = os.path.join(JSON_DIR, "single_gem_field_model_info.json")
     with open(model_info_path, "w") as f:
         json.dump(
             {

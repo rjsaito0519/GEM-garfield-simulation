@@ -1,8 +1,8 @@
 /**
  * Export full per-point avalanche electron trajectories (not just start/end
- * points, unlike gem_avalanche.cpp's endpoint CSV) to a CSV file, for the
- * planned Python/PyVista visualization layer to overlay against geometry
- * and field maps (see GitHub issue #3).
+ * points, unlike gem_avalanche.cpp's endpoint tree) to a ROOT TTree, for the
+ * Python/PyVista visualization layer to overlay against geometry and field
+ * maps (see GitHub issue #3).
  *
  * Needs no ROOT graphics at all: AvalancheMicroscopic::GetElectrons()[i].path
  * is populated unconditionally (confirmed in the installed Garfield++
@@ -24,18 +24,24 @@
  *   Same argument convention as gem_avalanche.cpp -- the numbers already
  *   used for a given model's gem_avalanche run can be reused here directly.
  *
- * Output: "<baseName>_avalanche_trajectories.csv", columns
+ * Output: "<baseName>_avalanche.root", tree "Trajectories", branches
  *   event,track,x,y,z,t,energy
- * (one row per recorded path point; "track" is a per-event index into
+ * (one entry per recorded path point; "track" is a per-event index into
  * AvalancheMicroscopic::GetElectrons(), not a globally unique ID -- pair
- * (event,track) to identify one electron's full path).
+ * (event,track) to identify one electron's full path). Opened in UPDATE
+ * mode and any existing "Trajectories" cycles purged first, so re-running
+ * this macro replaces its own tree without disturbing a sibling
+ * "Endpoints" tree that gem_avalanche.cpp may have written to the same
+ * file.
  */
 
 #include <cmath>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <string>
+
+#include <TFile.h>
+#include <TTree.h>
 
 #include "Garfield/AvalancheMicroscopic.hh"
 #include "Garfield/ComponentElmer.hh"
@@ -98,9 +104,20 @@ int main(int argc, char* argv[]) {
   // call for why.
   aval.EnableAvalancheSizeLimit(2000);
 
-  const std::string outPath = outDir + baseName + "_avalanche_trajectories.csv";
-  std::ofstream out(outPath);
-  out << "event,track,x,y,z,t,energy\n";
+  const std::string rootPath = outDir + baseName + "_avalanche.root";
+  TFile* rootFile = TFile::Open(rootPath.c_str(), "UPDATE");
+  rootFile->Delete("Trajectories;*");
+  TTree trajectoriesTree("Trajectories", "Per-point avalanche electron trajectories");
+  int b_event;
+  std::size_t b_track;
+  double b_x, b_y, b_z, b_t, b_energy;
+  trajectoriesTree.Branch("event", &b_event);
+  trajectoriesTree.Branch("track", &b_track);
+  trajectoriesTree.Branch("x", &b_x);
+  trajectoriesTree.Branch("y", &b_y);
+  trajectoriesTree.Branch("z", &b_z);
+  trajectoriesTree.Branch("t", &b_t);
+  trajectoriesTree.Branch("energy", &b_energy);
 
   const double t0 = 0.;
   for (int i = 0; i < nEvents; ++i) {
@@ -116,15 +133,18 @@ int main(int argc, char* argv[]) {
     std::size_t nPoints = 0;
     for (std::size_t track = 0; track < electrons.size(); ++track) {
       for (const auto& p : electrons[track].path) {
-        out << i << "," << track << "," << p.x << "," << p.y << "," << p.z << ","
-            << p.t << "," << p.energy << "\n";
+        b_event = i;
+        b_track = track;
+        b_x = p.x; b_y = p.y; b_z = p.z; b_t = p.t; b_energy = p.energy;
+        trajectoriesTree.Fill();
         ++nPoints;
       }
     }
     std::cout << "Event " << i << "/" << nEvents << ": " << electrons.size()
                << " electron tracks, " << nPoints << " trajectory points\n";
   }
-  out.close();
-  std::cout << "Wrote " << outPath << "\n";
+  trajectoriesTree.Write();
+  rootFile->Close();
+  std::cout << "Wrote " << rootPath << " (tree \"Trajectories\")\n";
   return 0;
 }

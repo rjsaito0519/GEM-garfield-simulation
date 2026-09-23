@@ -7,10 +7,10 @@ directly in the file (~a few MB each), so it also works fully offline.
 
 Usage:
     python3 plot_3d_html.py
-Outputs (under geometry/output/):
-    gem_geometry_3d.html
-    gem_field_vectors_3d.html   (has a dropdown to switch full/zoom)
-    gem_field_slice_3d.html     (has a dropdown to switch full/zoom)
+Outputs (see docs/reference.md "出力ディレクトリ構成" for the full results/ layout):
+    results/html/gem_geometry_3d.html
+    results/html/gem_field_vectors_3d.html   (has a dropdown to switch full/zoom)
+    results/html/gem_field_slice_3d.html     (has a dropdown to switch full/zoom)
 """
 
 import json
@@ -19,8 +19,11 @@ import os
 import numpy as np
 import plotly.graph_objects as go
 
-GEOMETRY_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
-MACROS_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "macros", "output")
+# results/ is this project's single consolidated output tree -- see
+# docs/reference.md "出力ディレクトリ構成" for what belongs in each subdir.
+_RESULTS_DIR = os.path.join(os.path.dirname(__file__), "..", "results")
+JSON_DIR = os.path.join(_RESULTS_DIR, "json")
+HTML_DIR = os.path.join(_RESULTS_DIR, "html")
 CM_TO_UM = 1.0e4
 
 GROUP_COLORS = {
@@ -42,7 +45,7 @@ def _load_json(path: str) -> dict:
 
 
 def write_geometry_html(output_path: str) -> None:
-    mesh = _load_json(os.path.join(GEOMETRY_OUTPUT_DIR, "single_gem_field_mesh_surfaces.json"))
+    mesh = _load_json(os.path.join(JSON_DIR, "single_gem_field_mesh_surfaces.json"))
     vertices = np.array(mesh["vertices"]) * CM_TO_UM
 
     traces = []
@@ -99,8 +102,8 @@ def _vector_trace(samples: list, sizeref: float) -> go.Cone:
 
 
 def write_vectors_html(output_path: str) -> None:
-    full = _load_json(os.path.join(MACROS_OUTPUT_DIR, "field_vectors_full.json"))
-    zoom = _load_json(os.path.join(MACROS_OUTPUT_DIR, "field_vectors_zoom.json"))
+    full = _load_json(os.path.join(JSON_DIR, "field_vectors_full.json"))
+    zoom = _load_json(os.path.join(JSON_DIR, "field_vectors_zoom.json"))
 
     # sizeref is tuned by eye for this grid spacing; if arrows look too
     # big/small after opening the file, adjust these numbers and rerun.
@@ -149,8 +152,8 @@ def _slice_trace(data: dict, visible: bool) -> go.Surface:
 
 
 def write_slice_html(output_path: str) -> None:
-    full = _load_json(os.path.join(MACROS_OUTPUT_DIR, "field_slice_full.json"))
-    zoom = _load_json(os.path.join(MACROS_OUTPUT_DIR, "field_slice_zoom.json"))
+    full = _load_json(os.path.join(JSON_DIR, "field_slice_full.json"))
+    zoom = _load_json(os.path.join(JSON_DIR, "field_slice_zoom.json"))
 
     trace_full = _slice_trace(full, visible=True)
     trace_zoom = _slice_trace(zoom, visible=False)
@@ -173,10 +176,10 @@ def write_slice_html(output_path: str) -> None:
 
 
 def main() -> None:
-    os.makedirs(GEOMETRY_OUTPUT_DIR, exist_ok=True)
-    write_geometry_html(os.path.join(GEOMETRY_OUTPUT_DIR, "gem_geometry_3d.html"))
-    write_vectors_html(os.path.join(GEOMETRY_OUTPUT_DIR, "gem_field_vectors_3d.html"))
-    write_slice_html(os.path.join(GEOMETRY_OUTPUT_DIR, "gem_field_slice_3d.html"))
+    os.makedirs(HTML_DIR, exist_ok=True)
+    write_geometry_html(os.path.join(HTML_DIR, "gem_geometry_3d.html"))
+    write_vectors_html(os.path.join(HTML_DIR, "gem_field_vectors_3d.html"))
+    write_slice_html(os.path.join(HTML_DIR, "gem_field_slice_3d.html"))
 
 
 if __name__ == "__main__":

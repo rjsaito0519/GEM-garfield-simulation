@@ -16,10 +16,10 @@ hole-wall loss.
 
 Usage:
     python3 build_single_gem100_field_mesh.py
-Outputs (under geometry/output/):
-    single_gem100_field.msh              - mesh (Gmsh v2.2 format, for ElmerGrid)
-    single_gem100_field_model_info.json  - electrode potentials + permittivities + geometry
-    single_gem100_field_mesh_full.png / _mesh_gem_zoom.png - mesh check plots
+Outputs (see docs/reference.md "出力ディレクトリ構成" for the full results/ layout):
+    results/mesh/single_gem100_field.msh              - mesh (Gmsh v2.2 format, for ElmerGrid)
+    results/json/single_gem100_field_model_info.json  - electrode potentials + permittivities + geometry
+    results/img/single_gem100_field_mesh_full.png / _mesh_gem_zoom.png - mesh check plots
 """
 
 import json
@@ -45,7 +45,13 @@ SURFACE_GROUPS_FOR_3D_VIEWER = [
     "DriftPlaneElectrode", "TransferPlaneElectrode",
 ]
 
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
+# results/ is this project's single consolidated output tree -- see
+# docs/reference.md "出力ディレクトリ構成" for what belongs in each subdir.
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RESULTS_DIR = os.path.join(REPO_ROOT, "results")
+MESH_DIR = os.path.join(RESULTS_DIR, "mesh")
+JSON_DIR = os.path.join(RESULTS_DIR, "json")
+IMG_DIR = os.path.join(RESULTS_DIR, "img")
 
 # Optional CLI override for transfer_field_v_per_cm, for the diagnostic
 # "does a stronger extraction field recover transmission" scan (see
@@ -74,7 +80,8 @@ TEST_CONFIG = SingleGemTestConfig(
 
 
 def main() -> None:
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    for d in (MESH_DIR, JSON_DIR, IMG_DIR):
+        os.makedirs(d, exist_ok=True)
     params = GEM_100UM
 
     gmsh.initialize()
@@ -88,7 +95,7 @@ def main() -> None:
     gmsh.option.setNumber("Mesh.MeshSizeMax", 0.02)
     gmsh.model.mesh.generate(3)
 
-    surfaces_path = os.path.join(OUTPUT_DIR, f"{BASE_NAME}_mesh_surfaces.json")
+    surfaces_path = os.path.join(JSON_DIR, f"{BASE_NAME}_mesh_surfaces.json")
     surface_group_ids = {
         name: field_model.physical_group_ids[name] for name in SURFACE_GROUPS_FOR_3D_VIEWER
     }
@@ -103,19 +110,19 @@ def main() -> None:
     print(f"[2/3] Mesh generated: {len(node_tags)} nodes, {n_tets} tetrahedra")
 
     gmsh.option.setNumber("Mesh.MshFileVersion", 2.2)
-    mesh_path = os.path.join(OUTPUT_DIR, f"{BASE_NAME}.msh")
+    mesh_path = os.path.join(MESH_DIR, f"{BASE_NAME}.msh")
     gmsh.write(mesh_path)
 
     node_coords = np.array(node_coords_flat).reshape(-1, 3)
 
-    full_range_path = os.path.join(OUTPUT_DIR, f"{BASE_NAME}_mesh_full.png")
+    full_range_path = os.path.join(IMG_DIR, f"{BASE_NAME}_mesh_full.png")
     plot_mesh_cross_section(
         node_coords, full_range_path, y_tolerance_cm=0.0005, equal_aspect=False
     )
 
     half_t_diel = params.dielectric_thickness_cm / 2.0
     z_gem_edge = half_t_diel + params.copper_thickness_cm
-    zoom_path = os.path.join(OUTPUT_DIR, f"{BASE_NAME}_mesh_gem_zoom.png")
+    zoom_path = os.path.join(IMG_DIR, f"{BASE_NAME}_mesh_gem_zoom.png")
     plot_mesh_cross_section(
         node_coords, zoom_path, y_tolerance_cm=0.0005,
         z_range_cm=(-z_gem_edge - 0.0005, z_gem_edge + 0.0005),
@@ -124,7 +131,7 @@ def main() -> None:
 
     gmsh.finalize()
 
-    model_info_path = os.path.join(OUTPUT_DIR, f"{BASE_NAME}_model_info.json")
+    model_info_path = os.path.join(JSON_DIR, f"{BASE_NAME}_model_info.json")
     with open(model_info_path, "w") as f:
         json.dump(
             {
