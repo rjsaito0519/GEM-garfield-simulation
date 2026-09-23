@@ -95,8 +95,8 @@ Solver 1
   Calculate Electric Energy = False
   Linear System Solver = Iterative
   Linear System Iterative Method = CG
-  Linear System Preconditioning = ILU1
-  Linear System Max Iterations = 2000
+  Linear System Preconditioning = ILU2
+  Linear System Max Iterations = 20000
   Linear System Convergence Tolerance = 1.0e-10
   Steady State Convergence Tolerance = 1.0e-8
 End

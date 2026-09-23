@@ -53,29 +53,33 @@ MESH_DIR = os.path.join(RESULTS_DIR, "mesh")
 JSON_DIR = os.path.join(RESULTS_DIR, "json")
 IMG_DIR = os.path.join(RESULTS_DIR, "img")
 
-# Optional CLI override for transfer_field_v_per_cm, for the diagnostic
-# "does a stronger extraction field recover transmission" scan (see
-# docs/debugging_notes.md, "Step 6" of the user-provided investigation
-# plan) -- NOT meant to represent a real operating point, just to test
-# field-strength sensitivity. Encoded into the output base name so each
-# field value gets its own mesh/result dir instead of clobbering the
+# Optional CLI overrides for transfer_field_v_per_cm and the GEM's own
+# voltage, for diagnostic "does a stronger extraction/internal field
+# recover transmission" scans (see docs/debugging_notes.md, "Step 6" of
+# the user-provided investigation plan, and the 2026-09-24 GEM-voltage
+# follow-up) -- NOT meant to represent a real operating point, just to
+# test field-strength sensitivity. Encoded into the output base name so
+# each combination gets its own mesh/result dir instead of clobbering the
 # baseline single_gem100_field.
 _TRANSFER_FIELD_V_PER_CM = float(sys.argv[1]) if len(sys.argv) > 1 else 2000.0
-BASE_NAME = (
-    "single_gem100_field"
-    if _TRANSFER_FIELD_V_PER_CM == 2000.0
-    else f"single_gem100_field_tf{int(_TRANSFER_FIELD_V_PER_CM)}"
-)
+_VOLTAGE_MULTIPLIER = float(sys.argv[2]) if len(sys.argv) > 2 else 1.0
+_name_parts = ["single_gem100_field"]
+if _TRANSFER_FIELD_V_PER_CM != 2000.0:
+    _name_parts.append(f"tf{int(_TRANSFER_FIELD_V_PER_CM)}")
+if _VOLTAGE_MULTIPLIER != 1.0:
+    _name_parts.append(f"v{_VOLTAGE_MULTIPLIER:g}x")
+BASE_NAME = "_".join(_name_parts)
 
 # Matches GEM1's actual conditions in TripleGemTestConfig
 # (geometry/triple_gem_field_model.py): drift_gap/transfer_gap/fields
-# identical, gem_voltage_v = 1.5 * 305.0 (the 100um-GEM voltage rule).
+# identical, gem_voltage_v = 1.5 * 305.0 (the 100um-GEM voltage rule),
+# optionally scaled by _VOLTAGE_MULTIPLIER.
 TEST_CONFIG = SingleGemTestConfig(
     drift_gap_cm=0.42,
     drift_field_v_per_cm=130.0,
     transfer_gap_cm=0.20,
     transfer_field_v_per_cm=_TRANSFER_FIELD_V_PER_CM,
-    gem_voltage_v=1.5 * 305.0,
+    gem_voltage_v=1.5 * 305.0 * _VOLTAGE_MULTIPLIER,
 )
 
 

@@ -20,9 +20,13 @@
  *
  * Usage: export_avalanche_trajectories <mesh/result dir> <.gas file>
  *          <n events> <zSensorMin> <zSensorMax> <zInjection> <xHalfCm>
- *          <yHalfCm> [e0_eV] [injectionRadiusCm] [output dir]
+ *          <yHalfCm> [e0_eV] [injectionRadiusCm] [output dir] [collisionSteps]
  *   Same argument convention as gem_avalanche.cpp -- the numbers already
  *   used for a given model's gem_avalanche run can be reused here directly.
+ *   collisionSteps: real collisions between recorded path points, default
+ *     100. Set to 1 to record every single real collision (much bigger
+ *     output, but shows the true per-collision step size -- e.g. near a
+ *     hole wall, see docs/debugging_notes.md).
  *
  * Output: "<baseName>_avalanche.root", tree "Trajectories", branches
  *   event,track,x,y,z,t,energy
@@ -70,6 +74,13 @@ int main(int argc, char* argv[]) {
   const double e0 = argc > 9 ? std::stod(argv[9]) : 0.1;
   const double injectionRadiusCm = argc > 10 ? std::stod(argv[10]) : 0.0005;
   const std::string outDir = argc > 11 ? std::string(argv[11]) + "/" : "./";
+  // How many real collisions between recorded path points (see the
+  // EnableDriftLines() comment below) -- default 100 for normal use
+  // (dense enough overlay plots without huge files), but 1 (every single
+  // real collision) lets the true per-collision step size be inspected
+  // directly near a hole wall, independent of any macroscopic-transport-
+  // table question -- see docs/debugging_notes.md.
+  const int collisionSteps = argc > 12 ? std::atoi(argv[12]) : 100;
 
   MediumMagboltz gas;
   if (!gas.LoadGasFile(gasFile)) {
@@ -91,7 +102,7 @@ int main(int argc, char* argv[]) {
 
   AvalancheMicroscopic aval;
   aval.SetSensor(&sensor);
-  aval.SetCollisionSteps(100);
+  aval.SetCollisionSteps(collisionSteps);
   // Must be explicitly enabled (default off): without it, path only ever
   // ends up with the seed point plus one final point regardless of how
   // long the drift line actually was (confirmed in the installed

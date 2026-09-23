@@ -20,7 +20,7 @@
  * Usage: gem_avalanche <mesh/result dir> <.gas file> <n events>
  *                       <zSensorMin> <zSensorMax> <zInjection>
  *                       <xHalfCm> <yHalfCm> [e0_eV] [injectionRadiusCm]
- *                       [rootOutDir] [imgOutDir]
+ *                       [rootOutDir] [imgOutDir] [maxElectronEnergyEv]
  *   zSensorMin/Max: the sensor's z bounds [cm], from the induction/transfer
  *     plane at the bottom to the drift plane at the top (see the model's
  *     printed electrode potentials, or its mesh cross-section plot, for
@@ -36,6 +36,10 @@
  *   rootOutDir/imgOutDir: where to write the .root file / the drift-lines
  *     PNG (e.g. results/root and results/img -- see docs/reference.md
  *     "出力ディレクトリ構成"). imgOutDir defaults to rootOutDir if omitted.
+ *   maxElectronEnergyEv: pre-extend MediumMagboltz's collision-rate table
+ *     to this energy up front, default 0 (= Magboltz's own auto-extension,
+ *     which is slow when triggered many times -- see the comment where
+ *     this is used).
  */
 
 #include <cmath>
@@ -84,6 +88,15 @@ int main(int argc, char* argv[]) {
   // rootOutDir if not given, so old single-output-dir invocations still work.
   const std::string rootOutDir = argc > 11 ? std::string(argv[11]) + "/" : "./";
   const std::string imgOutDir = argc > 12 ? std::string(argv[12]) + "/" : rootOutDir;
+  // Optional: pre-extend MediumMagboltz's electron-collision-rate table up
+  // front instead of letting it auto-extend in many small increments
+  // during the run (seen 2026-09-24 testing a 3x GEM-voltage diagnostic:
+  // electron energies routinely exceeded the table's default range, and
+  // each "Rate at X eV is not included... Increasing energy range" step
+  // is expensive when it happens hundreds of times over a run -- see
+  // docs/debugging_notes.md). 0 (default) leaves Magboltz's own
+  // auto-extension behavior untouched.
+  const double maxElectronEnergyEv = argc > 13 ? std::stod(argv[13]) : 0.0;
 
   // Must come *before* constructing TApplication: otherwise TApplication's
   // own construction tries to connect to the X11 display named by $DISPLAY,
@@ -98,6 +111,9 @@ int main(int argc, char* argv[]) {
   if (!gas.LoadGasFile(gasFile)) {
     std::cerr << "Failed to load gas file " << gasFile << "\n";
     return 1;
+  }
+  if (maxElectronEnergyEv > 0.) {
+    gas.SetMaxElectronEnergy(maxElectronEnergyEv);
   }
 
   // Material index 0 = Gas -- see gmsh_elmer_garfield_pipeline_gotchas

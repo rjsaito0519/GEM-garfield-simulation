@@ -12,8 +12,10 @@ Outputs (see docs/reference.md "出力ディレクトリ構成" for the full res
     results/img/triple_gem_field_mesh_full.png     - mesh check plot (full z range)
 """
 
+import dataclasses
 import json
 import os
+import sys
 
 from plot_utils import plot_mesh_cross_section
 
@@ -24,6 +26,7 @@ from mesh_export import export_surface_groups_json
 from triple_gem_field_model import (
     COPPER_RELATIVE_PERMITTIVITY,
     DIELECTRIC_RELATIVE_PERMITTIVITY,
+    GemStackLayer,
     TripleGemTestConfig,
     build_triple_gem_field_model,
 )
@@ -36,14 +39,40 @@ MESH_DIR = os.path.join(RESULTS_DIR, "mesh")
 JSON_DIR = os.path.join(RESULTS_DIR, "json")
 IMG_DIR = os.path.join(RESULTS_DIR, "img")
 
+# Optional CLI override: scale every GEM's own voltage (not the transfer/
+# drift/induction gap fields) by this factor, for the diagnostic "does a
+# much stronger internal GEM field recover per-stage gain/transmission"
+# question raised in docs/debugging_notes.md -- NOT a realistic operating
+# point, purely a diagnostic to separate "extraction field too weak"
+# (already tested, no effect) from "the GEM hole's own field/gain is the
+# bottleneck". Encoded into the output base name, same convention as
+# build_single_gem100_field_mesh.py's transfer-field override.
+_VOLTAGE_MULTIPLIER = float(sys.argv[1]) if len(sys.argv) > 1 else 1.0
+BASE_NAME = (
+    "triple_gem_field"
+    if _VOLTAGE_MULTIPLIER == 1.0
+    else f"triple_gem_field_v{_VOLTAGE_MULTIPLIER:g}x"
+)
+
+
+def _scaled_config(multiplier: float) -> TripleGemTestConfig:
+    base = TripleGemTestConfig()
+    if multiplier == 1.0:
+        return base
+    scaled_layers = tuple(
+        GemStackLayer(layer.name, layer.params, layer.voltage_v * multiplier)
+        for layer in base.layers
+    )
+    return dataclasses.replace(base, layers=scaled_layers)
+
 
 def main() -> None:
     for d in (MESH_DIR, JSON_DIR, IMG_DIR):
         os.makedirs(d, exist_ok=True)
-    config = TripleGemTestConfig()
+    config = _scaled_config(_VOLTAGE_MULTIPLIER)
 
     gmsh.initialize()
-    gmsh.model.add("triple_gem_field")
+    gmsh.model.add(BASE_NAME)
     field_model = build_triple_gem_field_model(config)
     print(f"[1/3] Geometry built. Electrode potentials: {field_model.electrode_potentials_v}")
 
@@ -59,7 +88,7 @@ def main() -> None:
     gmsh.option.setNumber("Mesh.MeshSizeMax", 0.02)
     gmsh.model.mesh.generate(3)
 
-    surfaces_path = os.path.join(JSON_DIR, "triple_gem_field_mesh_surfaces.json")
+    surfaces_path = os.path.join(JSON_DIR, f"{BASE_NAME}_mesh_surfaces.json")
     export_surface_groups_json(surface_groups, surfaces_path)
     print(f"      Surface mesh for 3D viewer written to {surfaces_path}")
 
@@ -71,17 +100,17 @@ def main() -> None:
     print(f"[2/3] Mesh generated: {len(node_tags)} nodes, {n_tets} tetrahedra")
 
     gmsh.option.setNumber("Mesh.MshFileVersion", 2.2)
-    mesh_path = os.path.join(MESH_DIR, "triple_gem_field.msh")
+    mesh_path = os.path.join(MESH_DIR, f"{BASE_NAME}.msh")
     gmsh.write(mesh_path)
 
     node_coords = np.array(node_coords_flat).reshape(-1, 3)
-    full_range_path = os.path.join(IMG_DIR, "triple_gem_field_mesh_full.png")
+    full_range_path = os.path.join(IMG_DIR, f"{BASE_NAME}_mesh_full.png")
     plot_mesh_cross_section(node_coords, full_range_path, y_tolerance_cm=0.0005, equal_aspect=False)
     print(f"[3/3] Mesh written to {mesh_path}; plot: {full_range_path}")
 
     gmsh.finalize()
 
-    model_info_path = os.path.join(JSON_DIR, "triple_gem_field_model_info.json")
+    model_info_path = os.path.join(JSON_DIR, f"{BASE_NAME}_model_info.json")
     with open(model_info_path, "w") as f:
         json.dump(
             {
