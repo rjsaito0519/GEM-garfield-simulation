@@ -346,6 +346,35 @@ GEM1-extracted cohort (genuine crossing): 582 / 1361 (42.8%)
 （境界付近を行き来した後に戻って吸収されたと見られる）、1.4%がGEM2内で
 `StatusLeftDriftMedium`。
 
+### P(GEM1 bottom通過 | r_birth) — off-axis secondary仮説の直接検証
+
+外部レビューの指摘で、「off-axis secondary electronが壁向きfield lineに
+乗る」という仮説がまだ直接測定されていなかった点を指摘された。
+`analyze_plane_crossings.py`に、GEM1内で生成された電子(1263件)について
+生成位置の動径座標 `r_birth`（最も近いタイル化GEM1孔中心からの距離）を
+求め、`r_birth` binごとにGEM1 bottom通過率を集計する機能を追加した。
+
+```
+r_birth in [  0.0,   5.0) um:   73 /  116 extracted ( 62.9%)
+r_birth in [  5.0,  10.0) um:  149 /  242 extracted ( 61.6%)
+r_birth in [ 10.0,  15.0) um:  180 /  326 extracted ( 55.2%)
+r_birth in [ 15.0,  20.0) um:  113 /  304 extracted ( 37.2%)
+r_birth in [ 20.0,  25.0) um:   46 /  157 extracted ( 29.3%)
+r_birth in [ 25.0,  30.0) um:   10 /   79 extracted ( 12.7%)
+r_birth in [ 30.0,  35.0) um:    1 /   39 extracted (  2.6%)
+```
+
+（GEM1孔半径: hole_inner=17.5µm、hole_outer=32.5µm）
+
+**きれいな単調減少（63%→3%）を確認** — GEM1孔の中心軸近くで生まれた
+secondary electronほどGEM1 bottomを通過しやすく、孔壁に近い場所で
+生まれた電子ほど通過できない。これはfield-line extraction test
+（軸に近いseedは100%下流に接続、r=24/32µmのseedは80%が壁に捕まる）
+と定性的に一致しており、「off-axis secondaryがwall-directedな
+field lineに乗って失われる」という仮説を**直接的なr_birth測定で
+裏付けた**（従来はfield line側の証拠のみで、実際のavalanche電子の
+生成位置分布との対応は未確認だった）。
+
 **追加検証（境界アーティファクトか否か）**: transfer gap 1内で死亡した415件のうち
 x/y領域境界(|x|≈210µm or |y|≈364µm、3x3タイル境界)にフラグが立たなかった
 残り202件について、最終位置(x,y)と**GEM1側**の25個の孔中心（タイル化済み）
@@ -393,20 +422,23 @@ x/y領域境界(|x|≈210µm or |y|≈364µm、3x3タイル境界)にフラグ�
   収集効率の低さ（26%程度）の組み合わせであることが判明。
 - 現時点で最も有力な描像: **孔が非常に狭い(r_in=17.5µm)ため、avalanche過程で
   生成されるsecondary electronの多くが軸から外れた位置に生まれ、その位置
-  からの電場ライン自体が既に壁を向いている**（field-line extraction test
-  で確認）ことに加え、**transfer gap内での拡散による横方向の広がりが
-  GEM2の孔サイズに対して無視できない**ため、GEM2到達時点で孔を外れやすい
-  — geometryのバグでもtrackingのバグでもなく、この特定の孔径・電圧・
-  ピッチの組み合わせにおける現実的な（望ましくない）物理的帰結である
-  可能性が高い。
-- 残る作業: (i) 境界アーティファクトを減らすため5x5タイル化を試す、
-  (ii) 統計をさらに増やしてGEM2孔収集効率をもっと正確に見積もる、
-  (iii) この効率が実機のGEM透過率（文献値）と比べて妥当な範囲か評価する、
-  (iv) mesh convergence test（孔近傍のメッシュを細かくしても結果が
-  変わらないか）、(v) 100µm GEM孔形状の文献的な裏付け（現状は
-  Kim et al. 2020のTable 1数値をbiconicalと仮定しているだけで、実際の
-  断面写真等では未確認）、(vi) 単段GEM100モデルのtransfer field scan
-  (2 vs 10kV/cm)をこの修正済みplane-crossing判定で再評価する（未実施）。
+  からの電場ライン自体が既に壁を向いている** — これはfield-line extraction
+  testでの示唆に加え、2026-09-23の`P(GEM1 bottom通過 | r_birth)`測定
+  （r_birth 0-5µmで63%→30-35µmで3%というきれいな単調減少）により
+  **直接確認された**。加えて、**transfer gap内での拡散による横方向の
+  広がりがGEM2の孔サイズに対して無視できない**ため、GEM2到達時点(31件)
+  でも孔に入るのは26%(8件)にとどまる。これらはgeometryのバグでも
+  trackingのバグでもなく、この特定の孔径・電圧・ピッチの組み合わせに
+  おける現実的な（望ましくない）物理的帰結である可能性が高い。
+- 残る作業（未実施、優先度順）: (i) 単段GEM100モデルのtransfer field scan
+  (2 vs 10kV/cm)をこの修正済みplane-crossing判定で再評価、(ii) 孔taper
+  形状の感度scanを同判定で再評価、(iii) field-line tracerのstep size
+  convergence確認(0.02/0.01/0.005µm)、(iv) mesh convergence test（孔近傍
+  メッシュを1/2, 1/4に細かくしても結果が変わらないか）、(v) 境界
+  アーティファクトを減らすため5x5タイル化を試す、(vi) 統計を100-200
+  eventまで増やし、event単位で集計してBernoulli独立性の誤りを避ける、
+  (vii) 100µm GEM孔形状の文献的な裏付け（現状はKim et al. 2020のTable 1
+  数値をbiconicalと仮定しているだけで、実際の断面写真等では未確認）。
 - `e0`（初期エネルギー）scanは優先度が低いとの調査方針書の判断に従い、まだ未実施。
 
 ## パイプライン構築時に踏んだ落とし穴（Gmsh → Elmer → Garfield++）

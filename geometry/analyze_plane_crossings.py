@@ -195,6 +195,8 @@ def main() -> None:
     birth_counts: dict[str, int] = {}
     track_masks = {}  # (ev,tr) -> boolean mask into the flat arrays, cached
     track_z_birth = {}
+    track_birth_label = {}
+    track_r_birth_cm = {}  # sqrt(x_birth^2 + y_birth^2), for the radial-extraction test below
     for ev, tr in keys:
         m = (event == ev) & (track == tr)
         track_masks[(ev, tr)] = m
@@ -202,6 +204,8 @@ def main() -> None:
         track_z_birth[(ev, tr)] = z_birth
         label = _classify_z(z_birth, birth_regions)
         birth_counts[label] = birth_counts.get(label, 0) + 1
+        track_birth_label[(ev, tr)] = label
+        track_r_birth_cm[(ev, tr)] = float(np.hypot(x[m][0], y[m][0]))
     print("Birth region (first recorded point of each track):")
     for label, _, _ in birth_regions:
         c = birth_counts.get(label, 0)
@@ -245,6 +249,41 @@ def main() -> None:
           f"{n_hole_entrance} are within a real GEM2 hole opening "
           f"(r<{gem2_hole_r * 1e4:.1f}um of some tiled hole center) "
           f"({100 * n_hole_entrance / max(1, len(reached_gem2_top)):.1f}%)")
+
+    # --- P(extraction | r_birth) for GEM1-born electrons -----------------
+    # Direct test of the "off-axis secondaries land where field lines are
+    # already wall-directed" hypothesis (see docs/debugging_notes.md):
+    # r_birth is each track's birth-point distance from its own hole axis
+    # (nearest tiled GEM1 hole center, not from the domain origin -- avalanche
+    # secondaries are produced across all 25 tiled GEM1 holes, not just the
+    # central one), binned against whether that track genuinely crossed
+    # GEM1's bottom plane.
+    gem1 = config.layers[0]
+    gem1_hole_centers = hole_centers_tiled(gem1.params.pitch_cm, config.n_cells_x, config.n_cells_y)
+    cohort_set = set(cohort)
+    gem1_born = [key for key in keys if track_birth_label[key] == "GEM1"]
+    r_bins_um = [0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, float("inf")]
+    bin_born = [0] * (len(r_bins_um) - 1)
+    bin_extracted = [0] * (len(r_bins_um) - 1)
+    for key in gem1_born:
+        m = track_masks[key]
+        x_birth, y_birth = x[m][0], y[m][0]
+        r_hole_um = min(np.hypot(x_birth - hx, y_birth - hy) for hx, hy in gem1_hole_centers) * 1e4
+        for bi in range(len(r_bins_um) - 1):
+            if r_bins_um[bi] <= r_hole_um < r_bins_um[bi + 1]:
+                bin_born[bi] += 1
+                if key in cohort_set:
+                    bin_extracted[bi] += 1
+                break
+    print(f"\nP(crossed GEM1 bottom | r_birth) for {len(gem1_born)} electrons born inside "
+          "GEM1 (r_birth = distance from the nearest tiled GEM1 hole center):")
+    for bi in range(len(r_bins_um) - 1):
+        lo, hi = r_bins_um[bi], r_bins_um[bi + 1]
+        hi_str = f"{hi:5.1f}" if hi != float("inf") else "  inf"
+        n_born, n_ext = bin_born[bi], bin_extracted[bi]
+        pct = 100 * n_ext / n_born if n_born > 0 else float("nan")
+        print(f"  r_birth in [{lo:5.1f}, {hi_str}) um: {n_ext:4d} / {n_born:4d} extracted "
+              f"({pct:5.1f}%)")
 
     # --- Final-fate classification of the GEM1-extracted cohort ---------
     if has_status:
