@@ -66,6 +66,20 @@ def hole_centers_tiled(pitch_cm: float, n_cells_x: int, n_cells_y: int) -> list[
     return list(unique_points.values())
 
 
+def _cone_or_cylinder(
+    x0: float, y0: float, z0: float, height: float, r1: float, r2: float
+) -> int:
+    """gmsh.model.occ.addCone(), except when r1 == r2: OCC's addCone
+    rejects a cone with two identical radii ("cone with two identic
+    radii") since that's degenerate -- geometrically just a cylinder, so
+    build one directly instead. Needed for the hole-taper sensitivity scan
+    (docs/debugging_notes.md, 2026-09-24): a cylindrical hole is the
+    inner_radius == outer_radius limit of the usual biconical taper."""
+    if abs(r1 - r2) < 1.0e-9:
+        return gmsh.model.occ.addCylinder(x0, y0, z0, 0.0, 0.0, height, r1)
+    return gmsh.model.occ.addCone(x0, y0, z0, 0.0, 0.0, height, r1, r2)
+
+
 def _cut_holes_from_block(block_tag: int, cutter_tags: list[int]) -> int:
     """Cut a list of tool solids out of one block and return the resulting volume tag."""
     out_dim_tags, _ = gmsh.model.occ.cut(
@@ -129,12 +143,12 @@ def build_dielectric_layer(
 
     hole_cutters = []
     for x0, y0 in hole_centers:
-        lower_cone = gmsh.model.occ.addCone(
-            x0, y0, z_bottom, 0.0, 0.0, half_t,
+        lower_cone = _cone_or_cylinder(
+            x0, y0, z_bottom, half_t,
             params.hole_outer_radius_cm, params.hole_inner_radius_cm,
         )
-        upper_cone = gmsh.model.occ.addCone(
-            x0, y0, z_center_cm, 0.0, 0.0, half_t,
+        upper_cone = _cone_or_cylinder(
+            x0, y0, z_center_cm, half_t,
             params.hole_inner_radius_cm, params.hole_outer_radius_cm,
         )
         hole_cutters += [lower_cone, upper_cone]
@@ -225,12 +239,12 @@ def build_hole_gas_volumes(
         bottom_cu = gmsh.model.occ.addCylinder(
             x0, y0, z_bottom_cu, 0.0, 0.0, t_cu, params.hole_outer_radius_cm
         )
-        lower_cone = gmsh.model.occ.addCone(
-            x0, y0, z_center_cm - half_t_diel, 0.0, 0.0, half_t_diel,
+        lower_cone = _cone_or_cylinder(
+            x0, y0, z_center_cm - half_t_diel, half_t_diel,
             params.hole_outer_radius_cm, params.hole_inner_radius_cm,
         )
-        upper_cone = gmsh.model.occ.addCone(
-            x0, y0, z_center_cm, 0.0, 0.0, half_t_diel,
+        upper_cone = _cone_or_cylinder(
+            x0, y0, z_center_cm, half_t_diel,
             params.hole_inner_radius_cm, params.hole_outer_radius_cm,
         )
         top_cu = gmsh.model.occ.addCylinder(

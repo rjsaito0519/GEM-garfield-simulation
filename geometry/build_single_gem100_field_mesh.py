@@ -15,13 +15,14 @@ separately when interpreting the result, not conflated with genuine
 hole-wall loss.
 
 Usage:
-    python3 build_single_gem100_field_mesh.py
+    python3 build_single_gem100_field_mesh.py [transfer_field_v_per_cm] [voltage_multiplier] [inner_diameter_um]
 Outputs (see docs/reference.md "出力ディレクトリ構成" for the full results/ layout):
     results/mesh/single_gem100_field.msh              - mesh (Gmsh v2.2 format, for ElmerGrid)
     results/json/single_gem100_field_model_info.json  - electrode potentials + permittivities + geometry
     results/img/single_gem100_field_mesh_full.png / _mesh_gem_zoom.png - mesh check plots
 """
 
+import dataclasses
 import json
 import os
 import sys
@@ -63,11 +64,24 @@ IMG_DIR = os.path.join(RESULTS_DIR, "img")
 # baseline single_gem100_field.
 _TRANSFER_FIELD_V_PER_CM = float(sys.argv[1]) if len(sys.argv) > 1 else 2000.0
 _VOLTAGE_MULTIPLIER = float(sys.argv[2]) if len(sys.argv) > 2 else 1.0
+# Optional CLI override for the hole's inner (narrowest, mid-dielectric)
+# diameter [um], for the hole-taper sensitivity scan requested in
+# docs/debugging_notes.md (2026-09-24): is the current 65->35->65um
+# biconical/hourglass taper itself responsible for the near-total GEM1
+# extraction loss, versus a weaker taper or a fully cylindrical
+# (inner == outer, 65->65->65um) hole? Outer diameter (65um, the Cu-face
+# opening) is NOT varied here -- only the taper's narrowest point.
+# NOT meant to represent a confirmed real GEM1 geometry; see
+# docs/debugging_notes.md for what's actually established from literature
+# vs assumed here.
+_INNER_DIAMETER_UM = float(sys.argv[3]) if len(sys.argv) > 3 else 35.0
 _name_parts = ["single_gem100_field"]
 if _TRANSFER_FIELD_V_PER_CM != 2000.0:
     _name_parts.append(f"tf{int(_TRANSFER_FIELD_V_PER_CM)}")
 if _VOLTAGE_MULTIPLIER != 1.0:
     _name_parts.append(f"v{_VOLTAGE_MULTIPLIER:g}x")
+if _INNER_DIAMETER_UM != 35.0:
+    _name_parts.append(f"id{_INNER_DIAMETER_UM:g}")
 BASE_NAME = "_".join(_name_parts)
 
 # Matches GEM1's actual conditions in TripleGemTestConfig
@@ -86,7 +100,7 @@ TEST_CONFIG = SingleGemTestConfig(
 def main() -> None:
     for d in (MESH_DIR, JSON_DIR, IMG_DIR):
         os.makedirs(d, exist_ok=True)
-    params = GEM_100UM
+    params = dataclasses.replace(GEM_100UM, hole_inner_radius_cm=_INNER_DIAMETER_UM / 2.0 * 1.0e-4)
 
     gmsh.initialize()
     gmsh.model.add(BASE_NAME)
