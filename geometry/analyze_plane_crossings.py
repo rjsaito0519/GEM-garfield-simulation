@@ -45,6 +45,7 @@ export_avalanche_trajectories with a smaller collisionSteps for finer
 resolution if needed.
 """
 
+import dataclasses
 import sys
 
 import numpy as np
@@ -158,11 +159,16 @@ def _interpolated_xy_at_plane(
 
 def main() -> None:
     if len(sys.argv) < 2:
-        print("Usage: analyze_plane_crossings.py <avalanche.root>")
+        print("Usage: analyze_plane_crossings.py <avalanche.root> [n_cells]")
         sys.exit(1)
     root_path = sys.argv[1]
+    # n_cells: must match the n_cells_x/y the ROOT file's geometry was
+    # actually built with (see build_triple_gem_field_mesh.py's optional
+    # 2nd CLI arg) -- only affects the GEM2 hole-entrance (x,y) check below;
+    # the z-plane thresholds don't depend on tiling density.
+    n_cells = int(sys.argv[2]) if len(sys.argv) > 2 else 3
 
-    config = TripleGemTestConfig()
+    config = dataclasses.replace(TripleGemTestConfig(), n_cells_x=n_cells, n_cells_y=n_cells)
     planes = _funnel_planes(config)
     birth_regions = _birth_regions(config)
     z_centers = _layer_z_centers(config)

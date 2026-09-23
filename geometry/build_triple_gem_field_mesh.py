@@ -5,7 +5,7 @@ docstring for why matplotlib must be imported before gmsh, why the mesh
 needs second-order elements, etc.
 
 Usage:
-    python3 build_triple_gem_field_mesh.py
+    python3 build_triple_gem_field_mesh.py [voltage_multiplier] [n_cells]
 Outputs (see docs/reference.md "出力ディレクトリ構成" for the full results/ layout):
     results/mesh/triple_gem_field.msh              - mesh (Gmsh v2.2 format, for ElmerGrid)
     results/json/triple_gem_field_model_info.json  - electrode potentials + permittivities
@@ -48,28 +48,36 @@ IMG_DIR = os.path.join(RESULTS_DIR, "img")
 # bottleneck". Encoded into the output base name, same convention as
 # build_single_gem100_field_mesh.py's transfer-field override.
 _VOLTAGE_MULTIPLIER = float(sys.argv[1]) if len(sys.argv) > 1 else 1.0
-BASE_NAME = (
-    "triple_gem_field"
-    if _VOLTAGE_MULTIPLIER == 1.0
-    else f"triple_gem_field_v{_VOLTAGE_MULTIPLIER:g}x"
-)
+# Optional CLI override for n_cells_x/n_cells_y (both, kept square), for the
+# tiling-density sensitivity check in docs/debugging_notes.md (2026-09-24):
+# the 3x3 tiling used everywhere else still leaves a sizeable lateral-
+# boundary-escape artifact (~51% of transfer-gap-1 losses in the
+# plane-crossing analysis) -- does 5x5 reduce it further? Must be odd, same
+# constraint as TripleGemTestConfig.n_cells_x/y.
+_N_CELLS = int(sys.argv[2]) if len(sys.argv) > 2 else 3
+_name_parts = ["triple_gem_field"]
+if _VOLTAGE_MULTIPLIER != 1.0:
+    _name_parts.append(f"v{_VOLTAGE_MULTIPLIER:g}x")
+if _N_CELLS != 3:
+    _name_parts.append(f"n{_N_CELLS}")
+BASE_NAME = "_".join(_name_parts)
 
 
-def _scaled_config(multiplier: float) -> TripleGemTestConfig:
+def _scaled_config(multiplier: float, n_cells: int) -> TripleGemTestConfig:
     base = TripleGemTestConfig()
-    if multiplier == 1.0:
-        return base
-    scaled_layers = tuple(
-        GemStackLayer(layer.name, layer.params, layer.voltage_v * multiplier)
-        for layer in base.layers
-    )
-    return dataclasses.replace(base, layers=scaled_layers)
+    scaled_layers = base.layers
+    if multiplier != 1.0:
+        scaled_layers = tuple(
+            GemStackLayer(layer.name, layer.params, layer.voltage_v * multiplier)
+            for layer in base.layers
+        )
+    return dataclasses.replace(base, layers=scaled_layers, n_cells_x=n_cells, n_cells_y=n_cells)
 
 
 def main() -> None:
     for d in (MESH_DIR, JSON_DIR, IMG_DIR):
         os.makedirs(d, exist_ok=True)
-    config = _scaled_config(_VOLTAGE_MULTIPLIER)
+    config = _scaled_config(_VOLTAGE_MULTIPLIER, _N_CELLS)
 
     gmsh.initialize()
     gmsh.model.add(BASE_NAME)
