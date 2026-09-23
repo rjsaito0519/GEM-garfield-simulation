@@ -49,39 +49,23 @@ docs/           詳細ドキュメント（下記「ドキュメント」参照�
 
 ## 実行環境
 
-| ツール | バージョン / パス |
+| ツール | バージョン |
 |---|---|
-| Gmsh (CLI) | 4.13.1 (`~/local/gmsh-4.13.1-Linux64/bin/gmsh`) |
-| Gmsh Python API | 4.15.2 (pipで`work`環境に導入済み。`conda install`はnumpy等の大規模ダウングレードを招くため使用しない) |
-| Elmer | v9.0 (`~/elmer/bin/`, ローカルビルド。`/group/had/sks/software/elmer` は共有ライブラリ欠損で使用不可) |
-| Garfield++ | ローカルビルド (`~/local/garfield`, パッケージバージョン文字列 "0.3") |
-| ROOT | 6.40.04 (`~/local/root/6.40.04`)。Python/解析用とGarfield++ビルド用で統一 |
+| Gmsh (CLI) | 4.13.1 |
+| Gmsh Python API | 4.15.2 |
+| Elmer | v9.0 |
+| Garfield++ | パッケージバージョン文字列 "0.3"（ROOT 6.40.04向けにビルド） |
+| ROOT | 6.40.04（Python/解析用とGarfield++ビルド用で統一） |
 | CMake | 3.31.8 |
 | gcc | 11.5.0 |
 
-Elmer/Garfield++の環境変数は `~/.bashrc` では無効化されている(起動高速化のため, 詳細は
-`~/local/envfs_README.md`)。このリポジトリではグローバル設定に頼らず、リポジトリ内の
-セットアップスクリプトで明示的にパスを通す方針（`elmer/run_field_solve.sh`, `macros/CMakeLists.txt`）。
+いずれもこの実行アカウント内にローカルインストールされたもので、パスは環境固有
+（`elmer/run_field_solve.sh`, `macros/CMakeLists.txt`が実際に使っているパスの
+定義箇所）。このリポジトリはグローバルな環境変数設定に頼らず、リポジトリ内の
+セットアップスクリプトで明示的にパスを通す方針。
 
-### Garfield++の再ビルドについて
-
-`~/local/garfield`は元々ROOT 6.32.04向けにビルドされており(`/sw/packages/root/6.32.04`)、
-`~/local/root/6.40.04`とはABIが非互換でリンクできませんでした。2026-09-22に
-`~/.package_build/garfieldpp`(公式ソース, gitlab.cern.ch/garfield/garfieldpp)から
-ROOT 6.40.04向けに再ビルド・再インストール済みです。再ビルドが必要になった場合:
-
-```bash
-cd ~/.package_build/garfieldpp/build
-export ROOTSYS=~/local/root/6.40.04
-export PATH="$ROOTSYS/bin:$PATH"
-export LD_LIBRARY_PATH="$ROOTSYS/lib:$LD_LIBRARY_PATH"
-cmake -DROOT_DIR="$ROOTSYS/cmake" .
-cmake --build . -j"$(nproc)"
-cmake --install .
-```
-
-`~/local/garfield`は本プロジェクト専用ではなく共有インストールなので、再ビルドする際は
-他プロジェクトへの影響がないか確認してから行うこと。
+Garfield++の再ビルド手順（ROOTバージョンを上げた場合など）は
+`docs/pipeline_gotchas.md`を参照。
 
 ## ステータス
 

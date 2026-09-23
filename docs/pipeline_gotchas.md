@@ -136,3 +136,25 @@
     `results/mesh/`と`results/json/`が`results/`の直接の子であることを
     前提にしたパス計算なので、`results/`の構成自体を変える場合はこの関数の
     ロジックも一緒に直すこと。
+
+## Garfield++の再ビルド（ROOTバージョンを変えた場合）
+
+Garfield++はROOTとABI互換性がある状態でリンクされている必要がある。ROOTを
+アップグレードした場合、既存のGarfield++ビルドは（ソースが同じでも）
+そのままでは新しいROOTとリンクできず、`undefined reference to
+ROOT::TGenericClassInfo::TGenericClassInfo(...)`のようなリンクエラーになる。
+公式ソース（gitlab.cern.ch/garfield/garfieldpp）から新しいROOT向けに
+再ビルドし直す必要がある:
+
+```bash
+cd <garfieldppのソースツリー>/build
+export ROOTSYS=<新しいROOTのインストール先>
+export PATH="$ROOTSYS/bin:$PATH"
+export LD_LIBRARY_PATH="$ROOTSYS/lib:$LD_LIBRARY_PATH"
+cmake -DROOT_DIR="$ROOTSYS/cmake" .
+cmake --build . -j"$(nproc)"
+cmake --install .
+```
+
+Garfield++のインストール先が他プロジェクトとの共有インストールの場合、
+再ビルドする前に他プロジェクトへの影響がないか確認すること。
