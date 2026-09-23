@@ -109,12 +109,11 @@ results/
 例外的に追跡する（再現可能な生成物なので、目視確認用の画像だけをgit管理する
 方針。他のディレクトリの中身はパイプラインを再実行すればいつでも再生成できる）。
 
-**注意**: `macros/export_field_samples.cpp`が書き出すJSON
-（`field_vectors_full.json`, `field_slice_full.json`等）だけは
-`<baseName>`プレフィックスが付かない（`results/json/`直下に単純な名前で
-書かれる）。別モデルに切り替えて再実行すると前のモデルの分は上書きされる。
-可視化スクリプトを実行する前に、対象にしたい`<baseName>`で
-`export_field_samples`を実行し直しておくこと。
+`macros/export_field_samples.cpp`が書き出すJSON
+（`<baseName>_field_vectors_full.json`, `<baseName>_field_slice_full.json`等、
+2026-09-24より`<baseName>`プレフィックス付き）も他の出力と同様
+`results/json/`直下に書かれる。可視化スクリプトを実行する前に、対象に
+したい`<baseName>`で`export_field_samples`を一度実行しておくこと。
 
 ## 4. ROOT出力のスキーマ
 

@@ -102,8 +102,8 @@ def _vector_trace(samples: list, sizeref: float) -> go.Cone:
 
 
 def write_vectors_html(output_path: str) -> None:
-    full = _load_json(os.path.join(JSON_DIR, "field_vectors_full.json"))
-    zoom = _load_json(os.path.join(JSON_DIR, "field_vectors_zoom.json"))
+    full = _load_json(os.path.join(JSON_DIR, "single_gem_field_field_vectors_full.json"))
+    zoom = _load_json(os.path.join(JSON_DIR, "single_gem_field_field_vectors_zoom.json"))
 
     # sizeref is tuned by eye for this grid spacing; if arrows look too
     # big/small after opening the file, adjust these numbers and rerun.
@@ -152,8 +152,8 @@ def _slice_trace(data: dict, visible: bool) -> go.Surface:
 
 
 def write_slice_html(output_path: str) -> None:
-    full = _load_json(os.path.join(JSON_DIR, "field_slice_full.json"))
-    zoom = _load_json(os.path.join(JSON_DIR, "field_slice_zoom.json"))
+    full = _load_json(os.path.join(JSON_DIR, "single_gem_field_field_slice_full.json"))
+    zoom = _load_json(os.path.join(JSON_DIR, "single_gem_field_field_slice_zoom.json"))
 
     trace_full = _slice_trace(full, visible=True)
     trace_zoom = _slice_trace(zoom, visible=False)

@@ -126,10 +126,18 @@
 
 ## 出力ディレクトリ
 
-18. **`macros/export_field_samples.cpp`が書くJSON
-    （`field_vectors_full.json`等）だけは`<baseName>`プレフィックスが
-    付かない。** 別モデルに切り替えて実行すると前のモデルの分を上書きする。
-    詳細は`docs/reference.md`「出力ディレクトリ構成」参照。
+18. ~~`macros/export_field_samples.cpp`が書くJSON（`field_vectors_full.json`
+    等）だけは`<baseName>`プレフィックスが付かない。別モデルに切り替えて
+    実行すると前のモデルの分を上書きする。~~ → **2026-09-24修正済み**
+    （`results/json/<baseName>_field_{vectors,slice}_{full,zoom}.json`に
+    プレフィックス付き）。この不整合を実際に踏んだ経緯: issue #3の
+    可視化スクリプトを別モデル(`triple_gem_field_n5`)で確認しようとした際、
+    直前に別モデル(`single_gem100_field`)向けに書かれた古いfield sample
+    JSONがそのまま読み込まれ、streamlineが0本になる（seed点がgeometryと
+    整合しない）という具体的な不具合を確認した。`visualization/plot_triple_gem.py`
+    ・`plot_z_profiles.py`・`geometry/plot_3d_matplotlib.py`・
+    `geometry/plot_3d_html.py`（後者2つは単段GEM専用の古いスクリプトで、
+    `single_gem_field_`固定プレフィックスに更新）も合わせて修正済み。
 
 19. **`macros/model_info.hh`の`LoadModelGeometryInfo`は、メッシュディレクトリ
     (`results/mesh/<baseName>/`)から2階層上がって`results/json/`を見に行く。**

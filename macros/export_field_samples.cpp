@@ -1,7 +1,7 @@
 /**
  * Sample an Elmer field map (single-GEM or the full 3-GEM stack -- this
  * macro is geometry-agnostic) on regular grids and dump the results to
- * JSON, for the interactive 3D viewer (macros/output/field_viewer.html) to
+ * JSON, for visualization/plot_triple_gem.py (see GitHub issue #3) to
  * render as vector arrows and as color-mapped slice planes.
  *
  * Two versions of each are written: a coarse "full" grid spanning the whole
@@ -12,6 +12,13 @@
  * The mesh/result base name and the pitch/domain-extent values are all
  * taken from "<mesh dir>/<baseName>_model_info.json" (written by
  * geometry/build_*_field_mesh.py), not hardcoded here -- see model_info.hh.
+ *
+ * Output: "<outDir>/<baseName>_field_{vectors,slice}_{full,zoom}.json"
+ * (baseName-prefixed, like every other macro's output in this project --
+ * fixed 2026-09-24, see docs/debugging_notes.md; previously these 4 files
+ * had no baseName prefix at all, so switching models without re-running
+ * this macro silently fed a stale/mismatched model's field data into the
+ * visualization).
  *
  * Usage: export_field_samples <mesh/result directory> <output directory>
  */
@@ -125,14 +132,14 @@ int main(int argc, char* argv[]) {
     WriteSamplesJson(
         SampleGrid(elm, -halfXCm, halfXCm, nx, -halfYCm, halfYCm, ny,
                    geo.z_domain_min_cm, geo.z_domain_max_cm, nz),
-        nx, ny, nz, outDir + "field_vectors_full.json");
+        nx, ny, nz, outDir + baseName + "_field_vectors_full.json");
   }
   {
     const int nx = 12, ny = 9, nz = 16;
     WriteSamplesJson(
         SampleGrid(elm, -halfXCm, halfXCm, nx, -halfYCm, halfYCm, ny,
                    -kZoomZCm, kZoomZCm, nz),
-        nx, ny, nz, outDir + "field_vectors_zoom.json");
+        nx, ny, nz, outDir + baseName + "_field_vectors_zoom.json");
   }
 
   // Slice grids (y=0 plane): denser, since these render as a smooth color map.
@@ -141,14 +148,14 @@ int main(int argc, char* argv[]) {
     WriteSamplesJson(
         SampleGrid(elm, -halfXCm, halfXCm, nx, 0.0, 0.0, 1,
                    geo.z_domain_min_cm, geo.z_domain_max_cm, nz),
-        nx, 1, nz, outDir + "field_slice_full.json");
+        nx, 1, nz, outDir + baseName + "_field_slice_full.json");
   }
   {
     const int nx = 80, nz = 80;
     WriteSamplesJson(
         SampleGrid(elm, -halfXCm, halfXCm, nx, 0.0, 0.0, 1,
                    -kZoomZCm, kZoomZCm, nz),
-        nx, 1, nz, outDir + "field_slice_zoom.json");
+        nx, 1, nz, outDir + baseName + "_field_slice_zoom.json");
   }
 
   return 0;

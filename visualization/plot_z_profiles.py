@@ -87,7 +87,7 @@ def main() -> None:
         IMG_DIR, f"{base_name}_z_profiles.png"
     )
 
-    slice_path = os.path.join(JSON_DIR, "field_slice_full.json")
+    slice_path = os.path.join(JSON_DIR, f"{base_name}_field_slice_full.json")
     trajectories_path = os.path.join(ROOT_DIR, f"{base_name}_avalanche.root")
 
     z_axis, ez_axis, e_mag_axis = load_axis_field_profile(slice_path)

@@ -101,7 +101,7 @@ def plot_geometry_3d(show: bool = False) -> None:
 
 def plot_vectors_3d(zoom: bool = False, show: bool = False) -> None:
     """3D quiver plot of the E field: arrow direction + log-magnitude color."""
-    name = "field_vectors_zoom.json" if zoom else "field_vectors_full.json"
+    name = "single_gem_field_field_vectors_zoom.json" if zoom else "single_gem_field_field_vectors_full.json"
     with open(os.path.join(JSON_DIR, name)) as f:
         data = json.load(f)
     # status != -6 excludes points outside the meshed domain; the magnitude
@@ -142,7 +142,7 @@ def plot_vectors_3d(zoom: bool = False, show: bool = False) -> None:
 
 def plot_slice_3d(zoom: bool = False, show: bool = False) -> None:
     """The y=0 potential slice as a flat colored surface positioned in 3D."""
-    name = "field_slice_zoom.json" if zoom else "field_slice_full.json"
+    name = "single_gem_field_field_slice_zoom.json" if zoom else "single_gem_field_field_slice_full.json"
     with open(os.path.join(JSON_DIR, name)) as f:
         data = json.load(f)
     nx, nz = data["nx"], data["nz"]

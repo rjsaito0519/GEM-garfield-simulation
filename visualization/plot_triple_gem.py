@@ -9,7 +9,7 @@ Inputs (already produced by the existing Gmsh/Elmer/Garfield++ pipeline,
 not regenerated here; see docs/reference.md "出力ディレクトリ構成"):
   - results/json/<baseName>_mesh_surfaces.json (geometry/mesh_export.py):
     {"vertices": [[x,y,z], ...], "groups": {name: [i,j,k, i,j,k, ...]}}
-  - results/json/field_slice_full.json (macros/export_field_samples.cpp):
+  - results/json/<baseName>_field_slice_full.json (macros/export_field_samples.cpp):
     {"nx", "ny", "nz", "samples": [{x,y,z,ex,ey,ez,v,status}, ...]}
     with ny == 1 (a y=0 plane slice) -- see that macro's docstring.
   - results/root/<baseName>_avalanche.root, tree "Trajectories"
@@ -17,10 +17,9 @@ not regenerated here; see docs/reference.md "出力ディレクトリ構成"):
     event,track,x,y,z,t,energy -- one entry per recorded drift-line point.
     Skipped if the file/tree doesn't exist (run export_avalanche_trajectories
     first to get one).
-  - results/json/field_vectors_full.json (macros/export_field_samples.cpp):
+  - results/json/<baseName>_field_vectors_full.json (macros/export_field_samples.cpp):
     same {"nx","ny","nz","samples"} schema as the slice file, but a genuine
     3D grid (ny > 1) -- used to seed E-field streamlines through the hole.
-    Same baseName-prefix caveat as the slice file (see slice_path below).
 
 Usage:
     python3 plot_triple_gem.py [baseName] [output.html]
@@ -162,17 +161,29 @@ def compute_streamlines(
     )
 
 
-def load_trajectories(root_path: str) -> pv.PolyData | None:
+def load_trajectories(root_path: str, max_points: int = 15_000) -> pv.PolyData | None:
     """All (event,track) drift lines in one PolyData (one VTK "lines" cell
     per track), colored by kinetic energy [eV] -- much cheaper to render
     than adding each track as its own actor when there can be 50+ per event
-    (see export_avalanche_trajectories.cpp's "Trajectories" tree)."""
+    (see export_avalanche_trajectories.cpp's "Trajectories" tree).
+
+    Downsampled to roughly max_points total points (per-track stride, always
+    keeping each track's first/last point so line topology stays intact) --
+    this is the "avalanche が大きい場合は...trajectory point のみ適度に
+    downsample する" requirement from GitHub issue #3, not implemented until
+    now. Without it, a several-hundred-event run produces an HTML file tens
+    of MB in size (client-side vtk.js embeds every point), which is both
+    slow to open in a browser and too large to publish as a shareable
+    artifact -- see docs/debugging_notes.md, 2026-09-24 visualization check.
+    """
     with uproot.open(root_path) as f:
         arrays = f["Trajectories"].arrays(
             ["event", "track", "x", "y", "z", "energy"], library="np"
         )
     event, track = arrays["event"], arrays["track"]
     keys = np.unique(np.stack([event, track], axis=1), axis=0)
+    n_total_raw = len(event)
+    stride = max(1, n_total_raw // max_points) if max_points > 0 else 1
 
     points_chunks, energy_chunks, line_cells = [], [], []
     offset = 0
@@ -180,6 +191,11 @@ def load_trajectories(root_path: str) -> pv.PolyData | None:
         idx = np.nonzero((event == ev) & (track == tr))[0]
         if idx.size < 2:
             continue  # a single-point "path" can't be drawn as a line
+        if idx.size > 2 and stride > 1:
+            kept = idx[::stride]
+            if kept[-1] != idx[-1]:
+                kept = np.append(kept, idx[-1])  # keep the true endpoint
+            idx = kept
         points_chunks.append(
             np.stack([arrays["x"][idx], arrays["y"][idx], arrays["z"][idx]], axis=1)
         )
@@ -234,15 +250,8 @@ def main() -> None:
     out_path = sys.argv[2] if len(sys.argv) > 2 else default_out
 
     surfaces_path = os.path.join(JSON_DIR, f"{base_name}_mesh_surfaces.json")
-    # NOTE: export_field_samples.cpp does NOT prefix its output files with
-    # baseName (unlike everything else in this pipeline) -- it always
-    # writes plain "field_slice_full.json" etc. into whatever output dir
-    # was passed on its command line. Re-running it for a different model
-    # overwrites the previous one; there is no way here to tell which model
-    # results/json/field_slice_full.json currently belongs to except by
-    # re-running export_field_samples for base_name right before this.
-    slice_path = os.path.join(JSON_DIR, "field_slice_full.json")
-    vectors_path = os.path.join(JSON_DIR, "field_vectors_full.json")
+    slice_path = os.path.join(JSON_DIR, f"{base_name}_field_slice_full.json")
+    vectors_path = os.path.join(JSON_DIR, f"{base_name}_field_vectors_full.json")
     trajectories_path = os.path.join(ROOT_DIR, f"{base_name}_avalanche.root")
     model_info_path = os.path.join(JSON_DIR, f"{base_name}_model_info.json")
 
