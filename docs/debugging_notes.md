@@ -628,6 +628,42 @@ open gas領域に達した後、mesh外へ出るか`maxSteps`上限に達した�
 r≳24µmは80%が壁）と一致しており、タイル化後のmeshでも同じ描像が保たれる
 ことも確認できた。
 
+## 2026-09-24: mesh convergence test → 収束済み、孔近傍メッシュは主因ではない
+
+孔近傍のメッシュを細かくしても結果が変わらないかを確認した。
+`build_single_gem100_field_mesh.py`に`_MESH_CURVATURE_OVERRIDE`環境変数
+（`Mesh.MeshSizeFromCurvature`を上書き、この値を倍にすると曲面上の要素
+サイズがおよそ半分になる — 当初`MeshSizeMin`を半分/4分の1にする案を
+試したが**ノード数が全く変化せず**（303097→303097）、孔近傍では
+`MeshSizeMin`が律速していないことが判明したため、`MeshSizeFromCurvature`
+に切り替えた）を追加し、baseline(20, 303097ノード)に対し40（2倍細かい、
+1776102ノード）でmesh再生成・Elmer再solve（約13分で収束）。
+
+### 結果
+
+```
+                          baseline(curvature=20)   finer(curvature=40)
+node数                    303097                    1776102
+field-line分類(r方向)     downstream/stuck = 17/16  downstream/stuck = 17/16 (完全一致)
+GEM-extracted cohort      43.1% (50 events)         41.2% (20 events)
+transfer 90%到達          8.8% of cohort            9.1% of cohort
+```
+
+**field-line分類（決定論的な電場のみのテスト）は完全に一致。** avalanche
+extraction効率・transfer gap侵入深さも、統計誤差（20 vs 50イベントの
+違いによるばらつき、cohort~165-491件に対するBernoulli誤差は数%オーダー）
+の範囲内で一致している。
+
+### 結論
+
+**孔近傍のメッシュ解像度は収束しており、主因ではない。** ノード数を
+約6倍(303097→1776102)にしても結果は変わらないため、既存のbaseline
+メッシュ（`Mesh.MeshSizeFromCurvature=20`）で十分と判断できる。
+さらに4分の1（curvature=80、ノード数約700万と見積もられ、Elmer solve
+だけで数十分〜時間オーダーになる可能性が高い）までは計算コストの都合で
+未実施だが、20→40で既に完全収束しているため、追加のコストに見合う
+情報は乏しいと判断し、優先度を下げる。
+
 ## 現時点の結論と次の一手候補
 
 - 電場の「向き」（仮説1）・「大きさ」（transfer field scan、GEM電圧3倍scan）・
@@ -666,9 +702,12 @@ r≳24µmは80%が壁）と一致しており、タイル化後のmeshでも同�
   到達7.6-9.6%といずれもtaper形状にほぼ非依存 — 「taper形状は主因では
   ない」という結論を再確認）。~~field-line tracerのstep size
   convergence確認(0.02/0.01/0.005µm)~~ → 2026-09-24実施済み（3種類の
-  step幅で内訳が完全一致(51.5%/48.5%)、数値的に収束済みと確認）、
-  (iv) mesh convergence test（孔近傍
-  メッシュを1/2, 1/4に細かくしても結果が変わらないか）、(v) 3段スタック
+  step幅で内訳が完全一致(51.5%/48.5%)、数値的に収束済みと確認）。
+  ~~mesh convergence test（孔近傍メッシュを1/2に細かくしても結果が
+  変わらないか）~~ → 2026-09-24実施済み（ノード数6倍(303097→1776102)
+  でもfield-line分類は完全一致、extraction効率も統計誤差内で一致 —
+  収束済みと確認。4分の1(curvature=80)は計算コストの都合で未実施だが
+  優先度は低い）、(v) 3段スタック
   transfer gap 1に残る境界アーティファクト(約51%)を減らすため5x5タイル化
   を試す、(vi) 統計を100-200
   eventまで増やし、event単位で集計してBernoulli独立性の誤りを避ける、

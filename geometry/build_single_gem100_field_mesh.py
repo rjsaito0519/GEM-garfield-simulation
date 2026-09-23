@@ -82,6 +82,15 @@ if _VOLTAGE_MULTIPLIER != 1.0:
     _name_parts.append(f"v{_VOLTAGE_MULTIPLIER:g}x")
 if _INNER_DIAMETER_UM != 35.0:
     _name_parts.append(f"id{_INNER_DIAMETER_UM:g}")
+# Env var (not a CLI arg, to keep the positional-arg list stable) override
+# for Mesh.MeshSizeFromCurvature, for the mesh convergence test requested in
+# docs/debugging_notes.md (2026-09-24): does refining the mesh near the
+# hole's curved surfaces change the field/avalanche results at all?
+# Doubling this value roughly halves element size along curved surfaces
+# (unlike MeshSizeMin, which turned out NOT to be the binding constraint
+# near the hole -- see docs/debugging_notes.md for why).
+if os.environ.get("_MESH_CURVATURE_OVERRIDE"):
+    _name_parts.append("meshtest" + os.environ["_MESH_CURVATURE_OVERRIDE"])
 BASE_NAME = "_".join(_name_parts)
 
 # Matches GEM1's actual conditions in TripleGemTestConfig
@@ -108,7 +117,7 @@ def main() -> None:
     print(f"[1/3] Geometry built. Electrode potentials: {field_model.electrode_potentials_v}")
     print(f"      Physical group IDs: {field_model.physical_group_ids}")
 
-    gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 20)
+    gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", float(os.environ.get("_MESH_CURVATURE_OVERRIDE", 20)))
     gmsh.option.setNumber("Mesh.MeshSizeMin", 0.0003)
     gmsh.option.setNumber("Mesh.MeshSizeMax", 0.02)
     gmsh.model.mesh.generate(3)
