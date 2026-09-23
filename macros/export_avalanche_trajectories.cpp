@@ -29,10 +29,15 @@
  *     hole wall, see docs/debugging_notes.md).
  *
  * Output: "<baseName>_avalanche.root", tree "Trajectories", branches
- *   event,track,x,y,z,t,energy
+ *   event,track,x,y,z,t,energy,status
  * (one entry per recorded path point; "track" is a per-event index into
  * AvalancheMicroscopic::GetElectrons(), not a globally unique ID -- pair
- * (event,track) to identify one electron's full path). Opened in UPDATE
+ * (event,track) to identify one electron's full path). "status" is that
+ * electron's final Garfield++ endpoint status (Electron::status, see
+ * GarfieldConstants.hh), repeated on every row of the track for
+ * convenience -- there is no separate per-track "track" index in
+ * gem_avalanche.cpp's "Endpoints" tree to join against, so this is the
+ * only way to classify a given trajectory's final fate. Opened in UPDATE
  * mode and any existing "Trajectories" cycles purged first, so re-running
  * this macro replaces its own tree without disturbing a sibling
  * "Endpoints" tree that gem_avalanche.cpp may have written to the same
@@ -122,6 +127,7 @@ int main(int argc, char* argv[]) {
   int b_event;
   std::size_t b_track;
   double b_x, b_y, b_z, b_t, b_energy;
+  int b_status;
   trajectoriesTree.Branch("event", &b_event);
   trajectoriesTree.Branch("track", &b_track);
   trajectoriesTree.Branch("x", &b_x);
@@ -129,6 +135,7 @@ int main(int argc, char* argv[]) {
   trajectoriesTree.Branch("z", &b_z);
   trajectoriesTree.Branch("t", &b_t);
   trajectoriesTree.Branch("energy", &b_energy);
+  trajectoriesTree.Branch("status", &b_status);
 
   const double t0 = 0.;
   for (int i = 0; i < nEvents; ++i) {
@@ -143,6 +150,7 @@ int main(int argc, char* argv[]) {
     const auto& electrons = aval.GetElectrons();
     std::size_t nPoints = 0;
     for (std::size_t track = 0; track < electrons.size(); ++track) {
+      b_status = electrons[track].status;
       for (const auto& p : electrons[track].path) {
         b_event = i;
         b_track = track;
