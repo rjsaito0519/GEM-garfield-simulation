@@ -228,6 +228,7 @@ def main() -> None:
     prev_count = len(cohort)
     prev_label = "GEM1-extracted cohort"
     surviving = cohort
+    surviving_by_label = {"GEM1-extracted cohort": cohort}  # for the event-level breakdown below
     for label, z_thresh in planes:
         if label in ("GEM1 top", "GEM1 bottom"):
             continue  # already the cohort definition itself
@@ -236,12 +237,13 @@ def main() -> None:
         print(f"  {label:26s}: {len(still_going):4d} "
               f"({100 * len(still_going) / len(cohort):5.1f}% of cohort, "
               f"{step_pct:5.1f}% of {prev_label})")
+        surviving_by_label[label] = still_going
         prev_count, prev_label, surviving = len(still_going), label, still_going
 
     # --- GEM2 hole-entrance check (z AND x,y within a real hole) --------
     z_gem2_top = dict(planes)["GEM2 top (hole entrance)"]
-    n_hole_entrance = 0
     reached_gem2_top = [key for key in cohort if _crossed(z[track_masks[key]], z_gem2_top)]
+    entered_gem2_hole = []
     for key in reached_gem2_top:
         m = track_masks[key]
         xy = _interpolated_xy_at_plane(x[m], y[m], z[m], z_gem2_top)
@@ -250,11 +252,37 @@ def main() -> None:
         xc, yc = xy
         min_dist = min(np.hypot(xc - hx, yc - hy) for hx, hy in gem2_hole_centers)
         if min_dist < gem2_hole_r:
-            n_hole_entrance += 1
+            entered_gem2_hole.append(key)
+    n_hole_entrance = len(entered_gem2_hole)
     print(f"\n  Of those {len(reached_gem2_top)} reaching GEM2's top plane, "
           f"{n_hole_entrance} are within a real GEM2 hole opening "
           f"(r<{gem2_hole_r * 1e4:.1f}um of some tiled hole center) "
           f"({100 * n_hole_entrance / max(1, len(reached_gem2_top)):.1f}%)")
+
+    # --- Event-level breakdown of the key funnel stages -------------------
+    # Per-primary-event counts (not per-electron), because secondary
+    # electrons within one primary event are correlated (they share the
+    # same avalanche history), not independent Bernoulli trials -- treating
+    # all N electrons across all events as N independent samples understates
+    # the true uncertainty. Reporting per-event counts here is what a future
+    # event-level bootstrap over uncertainty would resample from (see
+    # docs/debugging_notes.md, "統計を増やす").
+    event_stage_keys = {
+        "N_GEM1_out": cohort,
+        "N_transfer_mid": surviving_by_label.get("T1 75%", []),
+        "N_GEM2_arrive": surviving_by_label.get("GEM2 top-10um", []),
+        "N_GEM2_enter": entered_gem2_hole,
+    }
+    print("\nPer-event breakdown of the key funnel stages "
+          "(for future event-level bootstrap uncertainty estimates):")
+    header = f"  {'event':>6s}" + "".join(f"  {name:>15s}" for name in event_stage_keys)
+    print(header)
+    for ev in sorted(np.unique(event).tolist()):
+        row = f"  {ev:6d}"
+        for name, stage_keys in event_stage_keys.items():
+            n = sum(1 for k in stage_keys if k[0] == ev)
+            row += f"  {n:15d}"
+        print(row)
 
     # --- P(extraction | r_birth) for GEM1-born electrons -----------------
     # Direct test of the "off-axis secondaries land where field lines are
