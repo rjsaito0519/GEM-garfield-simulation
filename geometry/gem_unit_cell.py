@@ -73,7 +73,7 @@ def _cone_or_cylinder(
     rejects a cone with two identical radii ("cone with two identic
     radii") since that's degenerate -- geometrically just a cylinder, so
     build one directly instead. Needed for the hole-taper sensitivity scan
-    (docs/debugging_notes.md, 2026-09-24): a cylindrical hole is the
+    (docs/debugging_notes.md, 2026-09-23): a cylindrical hole is the
     inner_radius == outer_radius limit of the usual biconical taper."""
     if abs(r1 - r2) < 1.0e-9:
         return gmsh.model.occ.addCylinder(x0, y0, z0, 0.0, 0.0, height, r1)

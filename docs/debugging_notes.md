@@ -118,7 +118,7 @@ transfer 2kV/cm）だけを再現した単段GEMモデルを新規構築
 **genuine孔壁損失は依然として100%GEM1の箔厚み内に収まったまま、transfer gap到達は
 やはり0件** — 電場を5倍にしても孔からの脱出は全く改善しなかった。
 
-## 2026-09-24: 重要な訂正 — 「transmission ≈ 0%」は判定方法の問題だった
+## 2026-09-23: 重要な訂正 — 「transmission ≈ 0%」は判定方法の問題だった
 
 外部から改めてレビューを受け、**「endpointの最終status/位置だけを見て判定するのは
 不十分ではないか」**という指摘があった。具体的には、電子がGEM1・transfer gapを
@@ -161,7 +161,7 @@ GEM物理（各段で有限の抽出効率がある）に近い形**であり、
 「avalanche gain（GEM1内で生成された総数）」「GEM1 extraction efficiency」
 「GEM1→GEM2 transmission」「最終的な実効ゲイン」を分けて評価する。
 
-## 2026-09-24: tracking解像度の仮説(a)を反証、GEM電圧scanは実行環境の壁にぶつかる
+## 2026-09-23: tracking解像度の仮説(a)を反証、GEM電圧scanは実行環境の壁にぶつかる
 
 ### `SetCollisionSteps=1`での実ステップ幅確認 → 仮説(a)を反証
 
@@ -208,7 +208,7 @@ GEM物理（各段で有限の抽出効率がある）に近い形**であり、
 残してある（元の`CG + ILU1`, 2000反復よりは頑健なはずだが、根本的な
 高電圧での収束性は未解決）。
 
-## 2026-09-24: 孔形状（biconical vs cylindrical）sensitivity scan → 主因ではないと判明
+## 2026-09-23: 孔形状（biconical vs cylindrical）sensitivity scan → 主因ではないと判明
 
 外部から「現在の100µm GEM孔は65→35→65µmの対称なbiconical/hourglass形状だが、
 実機（LCP + laser etching製造）はほぼcylindricalという文献例もある。この
@@ -256,7 +256,7 @@ gainが増える（孔が広いほど電離しやすい）のは直感通りだ�
 モデルで再確認する余地はあるが、cylindrical（最も極端な形状変更）でも
 改善が見られなかったことから、taper形状が主因である可能性は低いと判断。
 
-## 2026-09-24: field-line extraction test → 電場自体は下流に接続している（軸に近ければ）
+## 2026-09-23: field-line extraction test → 電場自体は下流に接続している（軸に近ければ）
 
 electron avalanche（拡散・確率的散乱あり）を介さず、純粋な静電場だけで
 「孔から入れたseed点が最終的にどこへ向かうか」を決定論的に追跡する新規マクロ
@@ -281,7 +281,7 @@ r=24, 32 um:    80% が孔の中（foil内部）で壁に衝突 (stuck_in_foil)
 avalanche過程で生成点が軸から外れやすいこと自体が、この低い透過率の
 根本メカニズムと考えられる。
 
-## 2026-09-24: GEM電圧3倍 → 2000（avalanche size上限）に到達、genuine extractionはごくわずかに改善
+## 2026-09-23: GEM電圧3倍 → 2000（avalanche size上限）に到達、genuine extractionはごくわずかに改善
 
 `SetMaxElectronEnergy(500)`を使い、`single_gem100_field_v3x`で3イベント
 完走（実行時間の問題で20イベントは断念、詳細は上記「実行環境の壁」参照）。

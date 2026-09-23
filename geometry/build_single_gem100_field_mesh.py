@@ -57,7 +57,7 @@ IMG_DIR = os.path.join(RESULTS_DIR, "img")
 # Optional CLI overrides for transfer_field_v_per_cm and the GEM's own
 # voltage, for diagnostic "does a stronger extraction/internal field
 # recover transmission" scans (see docs/debugging_notes.md, "Step 6" of
-# the user-provided investigation plan, and the 2026-09-24 GEM-voltage
+# the user-provided investigation plan, and the 2026-09-23 GEM-voltage
 # follow-up) -- NOT meant to represent a real operating point, just to
 # test field-strength sensitivity. Encoded into the output base name so
 # each combination gets its own mesh/result dir instead of clobbering the
@@ -66,7 +66,7 @@ _TRANSFER_FIELD_V_PER_CM = float(sys.argv[1]) if len(sys.argv) > 1 else 2000.0
 _VOLTAGE_MULTIPLIER = float(sys.argv[2]) if len(sys.argv) > 2 else 1.0
 # Optional CLI override for the hole's inner (narrowest, mid-dielectric)
 # diameter [um], for the hole-taper sensitivity scan requested in
-# docs/debugging_notes.md (2026-09-24): is the current 65->35->65um
+# docs/debugging_notes.md (2026-09-23): is the current 65->35->65um
 # biconical/hourglass taper itself responsible for the near-total GEM1
 # extraction loss, versus a weaker taper or a fully cylindrical
 # (inner == outer, 65->65->65um) hole? Outer diameter (65um, the Cu-face

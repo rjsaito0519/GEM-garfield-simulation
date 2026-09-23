@@ -90,7 +90,7 @@ int main(int argc, char* argv[]) {
   const std::string imgOutDir = argc > 12 ? std::string(argv[12]) + "/" : rootOutDir;
   // Optional: pre-extend MediumMagboltz's electron-collision-rate table up
   // front instead of letting it auto-extend in many small increments
-  // during the run (seen 2026-09-24 testing a 3x GEM-voltage diagnostic:
+  // during the run (seen 2026-09-23 testing a 3x GEM-voltage diagnostic:
   // electron energies routinely exceeded the table's default range, and
   // each "Rate at X eV is not included... Increasing energy range" step
   // is expensive when it happens hundreds of times over a run -- see
