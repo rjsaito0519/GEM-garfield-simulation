@@ -53,6 +53,7 @@ _GROUP_STYLE = [
     ("BottomCopperElectrode", "#b87333", 1.0),   # copper
     ("DriftPlaneElectrode", "#cccccc", 0.12),    # gas-box end cap: just context
     ("InductionPlaneElectrode", "#cccccc", 0.12),
+    ("TransferPlaneElectrode", "#cccccc", 0.12),  # single-GEM test model only
 ]
 
 
