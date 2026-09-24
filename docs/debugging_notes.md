@@ -1259,11 +1259,21 @@ injection半径は六角格子の対称性から隣接ホールとの中間点�
 - Extraction efficiency: 34/49 (69.4%)
 
 **注意: これはbaseline電圧(1.0x)、`single_gem_field`（`single_gem_field_v1.15x`
-ではない）での結果。** production条件(1.15x)と揃えるため、
-`single_gem_field_v1.15x`メッシュに対して同じ広いinjectionでの
-batch runを別途実行中（進行中、追って結果を記録）。1.0x側の生ROOTは
-`results/root/single_gem_field_avalanche.root`にそのまま保存されている
-（今後の電圧scan比較用に参考として残す）。
+ではない）での結果。** 1.0x側の生ROOTは`results/root/single_gem_field_avalanche.root`
+にそのまま保存されている（今後の電圧scan比較用に参考として残す）。
+
+production条件(1.15x)を揃えた`single_gem_field_v1.15x`での同条件
+（50イベント、広いinjection半径70µm）の結果:
+
+- Collection efficiency: 49/50 (98.0%) — baseline(1.0x)と同じ。
+  collection efficiencyは主にGEM上方の電場パターン（ホールへの
+  funneling）由来で、GEM自身の電圧を15%上げる程度では大きく変化
+  しないという物理的に妥当な結果
+- Local multiplication (collectedした49件でのtrack数平均): 56.69 ± 58.10
+  （baseline比 約2.9倍 — 3段スタックでのGEM2/GEM3局所増幅比が1.0x→1.15x
+  で約2.2倍になったのと同じ桁で整合的）
+- Extraction efficiency: 35/49 (71.4%)（baseline 69.4%とほぼ同水準、
+  transfer/extraction系の電場比が変わっていないことと整合的）
 
 GEM1の3段スタック上方でのcollection efficiency測定、および3段スタック
 embedded文脈でのtransfer/次GEM進入率（`analyze_plane_crossings.py`の
