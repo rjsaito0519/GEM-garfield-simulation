@@ -344,24 +344,49 @@ def main() -> None:
             print(f"  job {idx:3d}: {'; '.join(problems)}")
         sys.exit(1)
 
-    final_path = os.path.join(RESULTS_ROOT_DIR, f"{base_name}{args.output_suffix}_avalanche.root")
-    part_paths = [j["part_root_path"] for j in jobs]
-    print(f"\nAll {len(part_paths)} parts DONE and RunInfo-consistent. "
-          f"Merging into {final_path} ...")
-    subprocess.run(["hadd", "-f", final_path] + part_paths, check=True)
-
     # Provenance (GitHub issue #9 item 4): which parts, from which run,
     # under which batch parameters, actually went into this merged file --
-    # appended as its own tree rather than folded into "RunInfoTrajectories" so it
+    # its own tree rather than folded into "RunInfoTrajectories" so it
     # doesn't collide with (or get overwritten by) the per-part RunInfo
     # trees export_avalanche_trajectories itself already writes there.
-    with uproot.update(final_path) as f:
-        f["BatchMergeProvenance"] = {
+    #
+    # Written into a small standalone temp file and folded in via `hadd`
+    # itself, NOT appended after the fact with `uproot.update()` on the
+    # merged file: for a large collisionSteps=1-type merge (Trajectories
+    # tree in the multi-GB range, file >2GB), uproot's writer hit
+    # `struct.error: 'i' format requires -2147483648 <= number <= 2147483647`
+    # trying to append a new key past the 2GB offset (2026-09-25). `hadd` is
+    # ROOT-native and already handles >2GB output correctly (this exact file
+    # merged fine before the provenance step), so let it do the writing
+    # instead of uproot.
+    #
+    # Also written with `mktree` (explicit classic TTree), not the
+    # dict-assignment `f["name"] = {...}` shortcut: since uproot 5.7.0 that
+    # shortcut defaults to writing an RNTuple instead. `hadd`'s RNTuple
+    # merge support crashed outright (SIGABRT in RNTupleMerger, 2026-09-25)
+    # when folding a dict-assigned RNTuple into this file. A classic TTree
+    # is also consistent with every other tree in this project (see
+    # CLAUDE.md's "prefer ROOT (TTree)" convention) and merges cleanly.
+    provenance_path = os.path.join(batch_tmp_dir, "provenance.root")
+    with uproot.recreate(provenance_path) as f:
+        f.mktree("BatchMergeProvenance", {
+            "part_index": np.dtype("int64"),
+            "seed": np.dtype("int64"),
+            "event_offset": np.dtype("int64"),
+            "n_events": np.dtype("int64"),
+        })
+        f["BatchMergeProvenance"].extend({
             "part_index": np.array([j["index"] for j in jobs]),
             "seed": np.array([j["seed"] for j in jobs]),
             "event_offset": np.array([j["offset"] for j in jobs]),
             "n_events": np.array([j["n_events"] for j in jobs]),
-        }
+        })
+
+    final_path = os.path.join(RESULTS_ROOT_DIR, f"{base_name}{args.output_suffix}_avalanche.root")
+    part_paths = [j["part_root_path"] for j in jobs]
+    print(f"\nAll {len(part_paths)} parts DONE and RunInfo-consistent. "
+          f"Merging into {final_path} ...")
+    subprocess.run(["hadd", "-f", final_path] + part_paths + [provenance_path], check=True)
     print(f"Wrote {final_path} (run_id={run_id}, per-job intermediates kept under {batch_tmp_dir})")
 
 
