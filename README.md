@@ -35,14 +35,14 @@ J. Phys.: Conf. Ser. 1498 (2020) 012023.
 | Transfer field | 2000 V/cm |
 | Induction field | 3100 V/cm |
 | ガス | P-10 (Ar 90% + CH4 10%), 1 atm |
-| Tiling (n_cells) | **5×5**（`triple_gem_field_v1.15x_n5`。3×3では境界損失が大きく、5×5への拡張で改善を確認済み。5×5が十分収束しているかの体系的検証はGitHub issue #7で進行中） |
-| Avalanche size limit | 2000（`EnableAvalancheSizeLimit`。この設定で実際に到達したイベントは現状確認されていない） |
+| Tiling (n_cells) | **7×7**（`triple_gem_field_v1.15x_n7`。3×3→5×5→7×7と拡張して比較した結果、5×5はまだ収束しておらずタイル境界からのラテラル脱出損失がGEM1-extracted cohortの34.2%を占めていた（7×7ではほぼ消失）ことが判明したため、2026-09-24に5×5から変更 -- 詳細は`docs/debugging_notes.md`「5x5 vs 7x7タイル収束性比較」参照。7×7自体が十分収束しているかは9×9との比較で追加確認中） |
+| Avalanche size limit | 2000（`EnableAvalancheSizeLimit`）。**Penning transfer有効化後、実際に頻繁に到達することを確認**（7×7・50イベントで28イベント(56%)が上限到達、5×5でも2/50。上限到達イベントは、その時点で未処理だった電子がGarfield++の実装上トラック自体が記録されないまま切り捨てられる（`AvalancheMicroscopic::transportParticleStack`のソース確認済み）ため、透過率等の絶対値は過小評価方向のバイアスを持つ可能性がある -- 現状の解析結果はこの制約下のものとして読む必要がある。上限引き上げの要否はユーザー判断待ち |
 | 電子注入位置・方向 | GEM1ホール軸近傍への非一様（軸寄り）注入、方向(0,0,-1)（診断目的の簡略化、実際の拡散後角度分布を再現するものではない -- 詳細は`macros/gem_avalanche.cpp`のコメント参照） |
 | 解析手法 | plane-crossing analysis（`geometry/analyze_plane_crossings.py`）。古いendpoint-based判定は誤った結論を出していたことが判明済み（下記「ステータス」のSUPERSEDED項目参照） |
-| baseName | `triple_gem_field_v1.15x_n5` |
+| baseName | `triple_gem_field_v1.15x_n7` |
 
 再現コマンド一式は `docs/reference.md` の「現在のproduction condition
-(`baseName` = `triple_gem_field_v1.15x_n5`) の再現手順」を参照。
+(`baseName` = `triple_gem_field_v1.15x_n7`) の再現手順」を参照。
 
 ## パイプライン
 
@@ -129,14 +129,22 @@ Garfield++の再ビルド手順（ROOTバージョンを上げた場合など）
       非常に低いものの、ゼロではなく各段でカスケード的に効率が落ちていく描像を
       定量的に裏付け。続けて、GEM2/GEM3単体の局所増幅比が~5倍程度に留まっている
       ことを定量化し（`docs/debugging_notes.md`のgain比較節）、GEM電圧を1.15倍する
-      ことでGEM2/GEM3の局所増幅比を共に10倍超（11.5x/11.7x）まで引き上げ済み
-      （現在のproduction conditionとして採用、上記参照）。この1.15x設定でも
-      plane-crossing analysisを実行し（5x5・50イベント）、GEM1-extracted cohort
-      2286/10910電子(21.0%)のうちGEM2ホール進入10.5%・GEM3到達0.1%（0/50イベントが
-      GEM3を完全通過）という結果を確認 — 値そのものの収束性・periodic boundary・
-      Penning transferの要否・電圧scanの体系化・文献比較はGitHub issue #7で
-      進行中。検証済み/未検証の仮説一覧・次の一手候補・パイプライン構築時の
-      落とし穴は `docs/debugging_notes.md` 参照
+      ことでGEM2/GEM3の局所増幅比を共に10倍超（11.5x/11.7x、Penning transfer
+      有効化前の値）まで引き上げ済み。その後issue #7で: (1) Penning
+      transferを有効化（Garfield++内蔵の文献値パラメータ、doi:10.1088/1748-0221/5/05/P05002）、
+      (2) injection方式の一様面積サンプリングへの修正、(3) **5x5タイルが
+      未収束と判明** — 同条件で7x7と比較したところ、5x5ではGEM1-extracted
+      cohortの34.2%を占めていたタイル境界からのラテラル脱出損失が7x7では
+      ほぼ消失し、GEM2ホール進入率が2.4%→14.7%、GEM3完全通過が0/9054→
+      6/7368件に増加。**production condition のtilingを5x5から7x7に
+      変更済み**（9x9との比較で7x7自体の収束性も追加確認中）。(4)
+      Penning有効化後は`EnableAvalancheSizeLimit(2000)`に頻繁に到達する
+      ことが判明（7x7・50イベント中28イベント）— 到達イベントは電子が
+      記録されないまま切り捨てられるため、絶対値は過小評価方向のバイアス
+      を持ちうる、上限引き上げの要否は検討中。periodic boundary・電圧scan
+      の体系化・文献比較は引き続きGitHub issue #7で進行中。検証済み/
+      未検証の仮説一覧・次の一手候補・パイプライン構築時の落とし穴は
+      `docs/debugging_notes.md` 参照
 - [x] Python可視化レイヤー (GitHub issue #3): `macros/export_avalanche_trajectories.cpp`
       で雪崩電子の全経路をROOT出力、`visualization/plot_triple_gem.py`で
       geometry+電場スライス+電子経路+電場streamlineを1つのPyVistaシーンに

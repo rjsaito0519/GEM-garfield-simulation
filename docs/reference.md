@@ -87,44 +87,52 @@ cmake ..
 cmake --build . -j"$(nproc)"
 ```
 
-## 2.5. 現在のproduction condition (`baseName` = `triple_gem_field_v1.15x_n5`) の再現手順
+## 2.5. 現在のproduction condition (`baseName` = `triple_gem_field_v1.15x_n7`) の再現手順
 
 README.md「現在のproduction condition」に対応する、実際に叩くコマンド全体
-（2026-09-24時点、GitHub issue #8）。上の§2のtriple_gem_field例との違いは
-voltage multiplier(1.15)・n_cells(5)・avalanche計算をbsub分割で行う点のみ。
+（2026-09-24時点、GitHub issue #7/#8）。上の§2のtriple_gem_field例との違いは
+voltage multiplier(1.15)・n_cells(7)・ElmerSolverのpreconditioner override・
+avalanche計算をbsub分割で行う点。
 
 ```bash
-# 1. ジオメトリ・メッシュ生成（voltage_multiplier=1.15, n_cells=5）
+# 1. ジオメトリ・メッシュ生成（voltage_multiplier=1.15, n_cells=7）
 cd geometry
-python3 build_triple_gem_field_mesh.py 1.15 5
-# -> results/mesh/triple_gem_field_v1.15x_n5.msh,
-#    results/json/triple_gem_field_v1.15x_n5_model_info.json
+python3 build_triple_gem_field_mesh.py 1.15 7
+# -> results/mesh/triple_gem_field_v1.15x_n7.msh,
+#    results/json/triple_gem_field_v1.15x_n7_model_info.json
 
-# 2. Elmer電場ソルブ
+# 2. Elmer電場ソルブ（ILU1を明示指定 -- デフォルトのILU2は7x7規模の
+#    メッシュ(約545万ノード)では "CRS_IncompleteLU: Number of nonzeros
+#    larger than HUGE(Integer)" で失敗する。docs/debugging_notes.md
+#    2026-09-24節参照）
 cd ../elmer
-bash run_field_solve.sh triple_gem_field_v1.15x_n5
+bash run_field_solve.sh triple_gem_field_v1.15x_n7 ILU1 2000
 
-# 3. 電子雪崩計算（KEKCC bsub分割、50イベントを10ジョブに分割 -- 単体で
-#    流すと5x5タイルの分ElmergridのDOF数が多く、時間がかかる。§5参照）
+# 3. 電子雪崩計算（KEKCC bsub分割、50イベントを10ジョブに分割）
 cd ..
 python3 batch/run_avalanche_batch.py \
-  results/mesh/triple_gem_field_v1.15x_n5 resources/ar_ch4_90_10.gas \
-  50 -0.2029 0.8405 0.4235 0.021 0.03637306695894642 0.1 0.0005 \
+  results/mesh/triple_gem_field_v1.15x_n7 resources/ar_ch4_90_10.gas \
+  50 -0.2029 0.8405 0.4235 0.049 0.08487048957087498 0.1 0.0005 \
   --njobs 10 --queue s
-# -> results/root/triple_gem_field_v1.15x_n5_avalanche.root ("Trajectories" tree)
+# -> results/root/triple_gem_field_v1.15x_n7_avalanche.root ("Trajectories" + "RunInfo" tree)
 
 # 4. genuine plane-crossing解析（GEM1-extracted cohortのfunnel、最終fate等）
 cd geometry
 python3 analyze_plane_crossings.py \
-  ../results/root/triple_gem_field_v1.15x_n5_avalanche.root 5
+  ../results/root/triple_gem_field_v1.15x_n7_avalanche.root
 ```
 
-この`_avalanche.root`は`macros/run_info.hh`が導入される前（2026-09-24の
-issue #6作業より前）に生成されたため"RunInfo" treeを持たず、
-`analyze_plane_crossings.py`はn_cellsをCLI引数(上のコマンドの末尾`5`)で
-与える必要がある（RunInfoがあれば自動的に読み取れる、item 2参照）。この
-avalanche計算をissue #6作業後に再実行すれば"RunInfo"が付き、CLI引数無しで
-実行しても同じ結果になるはずである（未検証）。
+この`_avalanche.root`は"RunInfo" treeを持つため、`analyze_plane_crossings.py`
+はn_cells等の幾何条件を自動で読み取る（末尾の明示的なn_cells引数は不要、
+GitHub issue #6 item 2）。
+
+**注意（2026-09-24時点で未解決）: `EnableAvalancheSizeLimit(2000)`が
+Penning transfer有効化後は頻繁に到達する（このproduction条件で50
+イベント中28イベントが到達）。** 上限到達イベントは、その時点で未処理
+だった電子のトラックがGarfield++の実装上記録されないまま切り捨てられる
+ため、`analyze_plane_crossings.py`の透過率等の絶対値は過小評価方向の
+バイアスを持ちうる。上限を上げるかはユーザー判断待ち（README.md
+「現在のproduction condition」参照）。
 
 ## 3. 出力ディレクトリ構成 (`results/`)
 
