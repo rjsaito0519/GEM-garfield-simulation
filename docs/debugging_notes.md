@@ -1191,6 +1191,37 @@ injection分布で計算されたものなので、**この変更後に再計算
 Penning有効・修正済みinjectionで再実行し、gain/funnel解析を更新する
 （issue #7の一部として進行中）。
 
+## 2026-09-24: 7x7タイル化メッシュでElmerSolverが「Number of nonzeros larger than HUGE(Integer)」で失敗（issue #7 item 1、未解決）
+
+issue #7 item 1（5x5 vs 7x7のfinite tile size convergence確認）のため
+`triple_gem_field_v1.15x_n7`（voltage_multiplier=1.15, n_cells=7）を
+ビルドしたところ、Gmshメッシュ生成・ElmerGrid変換までは成功した
+（5,449,389ノード、4,081,461四面体 — 5x5より大幅に大きい）ものの、
+`ElmerSolver`が以下のエラーで停止した:
+
+```
+ERROR:: CRS_IncompleteLU: Number of nonzeros larger than HUGE(Integer)
+ERROR:: CRS_IncompleteLU: Try some cheaper preconditioner!
+STOP 1
+```
+
+`elmer/write_sif.py`の`_SOLVER_BLOCK`が使っている`Linear System
+Preconditioning = ILU2`のICU分解が、メッシュが大きくなったことで
+非ゼロ要素数が32bit整数の範囲（`HUGE(Integer)`）を超えたことが原因と
+見られる。これは以前（`5cfd9cec`、2026-09-23）ILU1が高電圧(1.5-3x)
+スキャンで収束しなかったために ILU2/20000イテレーションへ切り替えた
+経緯とは別種の問題（あちらは収束性、こちらはメモリ/整数オーバーフロー）。
+
+`elmer/write_sif.py`は全メッシュ共通のsolver設定を使っているため、
+ここを不用意に変更すると既存の5x5 productionメッシュ等の収束品質にも
+影響しうる（build configuration変更にあたるため、ユーザーとの相談が
+必要と判断し、この時点ではまだ変更していない）。切り分けとして、
+`results/mesh/triple_gem_field_v1.15x_n7.sif`だけをローカルに直接編集
+（`write_sif.py`は変更していない）してILU1/2000イテレーションに
+戻し、既存のElmerGrid変換済みメッシュを再利用してElmerSolverを
+再実行する実験を実施中（1.15x電圧は以前の1.5-3xスキャンほど極端では
+ないため、ILU1でも収束する可能性がある）。結果は追って記録する。
+
 ## パイプライン構築時に踏んだ落とし穴（Gmsh → Elmer → Garfield++）
 
 こちらは物理の問題ではなく、素朴にハマったバグ・仕様。同種の変更をする際は再確認。
