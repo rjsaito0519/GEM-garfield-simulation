@@ -11,11 +11,38 @@ HypTPC (J-PARC E42/E45/E72共通) の3段GEMスタック。
 出典: S.H. Kim et al., "Development of a time projection chamber for J-PARC hadron physics program",
 J. Phys.: Conf. Ser. 1498 (2020) 012023.
 
-- 3層構成: 50 µm GEM → 50 µm GEM → 100 µm GEM (ゲート側からパッド側)
+- 3層構成: 100 µm GEM → 50 µm GEM → 50 µm GEM (ドリフト側からパッド側。
+  Kim et al. 2020論文の50→50→100µmとは異なる並び順を採用 -- 詳細・確認経緯は
+  下記「現在のproduction condition」参照)
 - ガス: P-10 (Ar 90% + CH4 10%), 1 atm
 
 詳細パラメータは `geometry/gem_params.py`, `geometry/*_field_model.py` を参照
 （`params/`によるYAML駆動化はまだ未実装、将来的な検討事項）。
+
+## 現在のproduction condition
+
+2026-09-24時点。数週間後にこのリポジトリを見なおしても「今どの条件が正しい
+設定なのか」がすぐ分かるように、ここに一箇所にまとめる（GitHub issue #8）。
+個々の値の出典・導出は `geometry/gem_params.py`, `geometry/triple_gem_field_model.py`,
+`docs/debugging_notes.md`（2026-09-24の各節）を参照。
+
+| 項目 | 値 |
+|---|---|
+| GEM段構成 | 100µm(GEM1, ドリフト側) → 50µm(GEM2) → 50µm(GEM3, パッド側) |
+| GEM電圧 | GEM1(100µm) = 526.125 V, GEM2/GEM3(50µm) = 350.75 V（下記voltage multiplier適用後） |
+| Voltage multiplier | **1.15x**（`build_triple_gem_field_mesh.py`の電圧倍率引数。base値はGEM1=457.5V, GEM2/3=305V。GEM2/GEM3の局所増幅比を10倍超にする目的で導入 -- `docs/debugging_notes.md`参照。GEM自身の電圧のみに適用され、下記drift/transfer/induction電場は倍率の対象外） |
+| Drift field | 130 V/cm |
+| Transfer field | 2000 V/cm |
+| Induction field | 3100 V/cm |
+| ガス | P-10 (Ar 90% + CH4 10%), 1 atm |
+| Tiling (n_cells) | **5×5**（`triple_gem_field_v1.15x_n5`。3×3では境界損失が大きく、5×5への拡張で改善を確認済み。5×5が十分収束しているかの体系的検証はGitHub issue #7で進行中） |
+| Avalanche size limit | 2000（`EnableAvalancheSizeLimit`。この設定で実際に到達したイベントは現状確認されていない） |
+| 電子注入位置・方向 | GEM1ホール軸近傍への非一様（軸寄り）注入、方向(0,0,-1)（診断目的の簡略化、実際の拡散後角度分布を再現するものではない -- 詳細は`macros/gem_avalanche.cpp`のコメント参照） |
+| 解析手法 | plane-crossing analysis（`geometry/analyze_plane_crossings.py`）。古いendpoint-based判定は誤った結論を出していたことが判明済み（下記「ステータス」のSUPERSEDED項目参照） |
+| baseName | `triple_gem_field_v1.15x_n5` |
+
+再現コマンド一式は `docs/reference.md` の「現在のproduction condition
+(`baseName` = `triple_gem_field_v1.15x_n5`) の再現手順」を参照。
 
 ## パイプライン
 
@@ -85,15 +112,31 @@ Garfield++の再ビルド手順（ROOTバージョンを上げた場合など）
       トランスファー2kV/cm、インダクション3.1kV/cm、ドリフト130V/cmを積み上げ、
       カソード側で約-2542V。ElmerGridでconformalメッシュ・ElmerSolve成功、
       Garfield++での電位分布も各GEMホールで妥当な漏斗形状を確認済み
-- [~] 3段GEMでの電子雪崩・ゲイン計算: 単位セル1個では二次電子が100%孔の壁に吸収され
-      GEM2に到達しない問題を発見。3x3セルにタイル化して境界アーティファクト由来の損失
-      (16%)はゼロにできたが、孔の壁そのものへの吸収(84%)は残ったまま。100イベント
-      (終端点2354個)まで統計を増やしても到達ゼロを確認し、統計不足ではなく系統的な
-      効果であることを確認 — 未解決のオープンな問題。GEM1単体での切り分けテスト、
-      medium連続性の直接確認、transfer電場scan(2→10kV/cm)でも改善せず、
-      「3段スタック特有の問題ではない」ことは確認済み。検証済み/未検証の仮説一覧・
-      次の一手候補・パイプライン構築時の落とし穴は `docs/debugging_notes.md` 参照
-      （GitHub issue #2）
+- [SUPERSEDED, see below] ~~3段GEMでの電子雪崩・ゲイン計算: 単位セル1個では二次電子が
+      100%孔の壁に吸収されGEM2に到達しない問題を発見。3x3セルにタイル化して境界
+      アーティファクト由来の損失(16%)はゼロにできたが、孔の壁そのものへの吸収(84%)は
+      残ったまま。100イベント(終端点2354個)まで統計を増やしても到達ゼロを確認し、
+      統計不足ではなく系統的な効果であることを確認 — 未解決のオープンな問題。~~
+      **この結論はendpoint-based判定（電子の最終到達点だけを見る方式）とタイル無し/3x3
+      タイルという、両方とも後に見直された条件に基づく。下の`[x] (current)`項目が
+      現在の結論。削除はせず、判定方法自体の変遷の記録として残す。**
+- [x] (current, GitHub issue #2) 3段GEMでの電子雪崩・genuine plane-crossing解析:
+      「電子の最終到達点」ではなく「z平面を実際に下向きに通過したか」で判定する
+      plane-crossing analysis（`geometry/analyze_plane_crossings.py`、2026-09-23導入）
+      に切り替え、5x5タイル・150イベント（baseline電圧1.0x）で**GEM2を完全に通過する
+      電子(28件)、GEM3にまで到達する電子(3件)を初めて統計的に意味のある数で確認**
+      （`docs/debugging_notes.md`「2026-09-24: 統計を150イベントに増強」）。透過は
+      非常に低いものの、ゼロではなく各段でカスケード的に効率が落ちていく描像を
+      定量的に裏付け。続けて、GEM2/GEM3単体の局所増幅比が~5倍程度に留まっている
+      ことを定量化し（`docs/debugging_notes.md`のgain比較節）、GEM電圧を1.15倍する
+      ことでGEM2/GEM3の局所増幅比を共に10倍超（11.5x/11.7x）まで引き上げ済み
+      （現在のproduction conditionとして採用、上記参照）。この1.15x設定でも
+      plane-crossing analysisを実行し（5x5・50イベント）、GEM1-extracted cohort
+      2286/10910電子(21.0%)のうちGEM2ホール進入10.5%・GEM3到達0.1%（0/50イベントが
+      GEM3を完全通過）という結果を確認 — 値そのものの収束性・periodic boundary・
+      Penning transferの要否・電圧scanの体系化・文献比較はGitHub issue #7で
+      進行中。検証済み/未検証の仮説一覧・次の一手候補・パイプライン構築時の
+      落とし穴は `docs/debugging_notes.md` 参照
 - [x] Python可視化レイヤー (GitHub issue #3): `macros/export_avalanche_trajectories.cpp`
       で雪崩電子の全経路をROOT出力、`visualization/plot_triple_gem.py`で
       geometry+電場スライス+電子経路+電場streamlineを1つのPyVistaシーンに

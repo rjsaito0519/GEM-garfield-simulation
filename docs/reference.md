@@ -87,6 +87,45 @@ cmake ..
 cmake --build . -j"$(nproc)"
 ```
 
+## 2.5. 現在のproduction condition (`baseName` = `triple_gem_field_v1.15x_n5`) の再現手順
+
+README.md「現在のproduction condition」に対応する、実際に叩くコマンド全体
+（2026-09-24時点、GitHub issue #8）。上の§2のtriple_gem_field例との違いは
+voltage multiplier(1.15)・n_cells(5)・avalanche計算をbsub分割で行う点のみ。
+
+```bash
+# 1. ジオメトリ・メッシュ生成（voltage_multiplier=1.15, n_cells=5）
+cd geometry
+python3 build_triple_gem_field_mesh.py 1.15 5
+# -> results/mesh/triple_gem_field_v1.15x_n5.msh,
+#    results/json/triple_gem_field_v1.15x_n5_model_info.json
+
+# 2. Elmer電場ソルブ
+cd ../elmer
+bash run_field_solve.sh triple_gem_field_v1.15x_n5
+
+# 3. 電子雪崩計算（KEKCC bsub分割、50イベントを10ジョブに分割 -- 単体で
+#    流すと5x5タイルの分ElmergridのDOF数が多く、時間がかかる。§5参照）
+cd ..
+python3 batch/run_avalanche_batch.py \
+  results/mesh/triple_gem_field_v1.15x_n5 resources/ar_ch4_90_10.gas \
+  50 -0.2029 0.8405 0.4235 0.021 0.03637306695894642 0.1 0.0005 \
+  --njobs 10 --queue s
+# -> results/root/triple_gem_field_v1.15x_n5_avalanche.root ("Trajectories" tree)
+
+# 4. genuine plane-crossing解析（GEM1-extracted cohortのfunnel、最終fate等）
+cd geometry
+python3 analyze_plane_crossings.py \
+  ../results/root/triple_gem_field_v1.15x_n5_avalanche.root 5
+```
+
+この`_avalanche.root`は`macros/run_info.hh`が導入される前（2026-09-24の
+issue #6作業より前）に生成されたため"RunInfo" treeを持たず、
+`analyze_plane_crossings.py`はn_cellsをCLI引数(上のコマンドの末尾`5`)で
+与える必要がある（RunInfoがあれば自動的に読み取れる、item 2参照）。この
+avalanche計算をissue #6作業後に再実行すれば"RunInfo"が付き、CLI引数無しで
+実行しても同じ結果になるはずである（未検証）。
+
 ## 3. 出力ディレクトリ構成 (`results/`)
 
 2026-09-23にファイル種別ごとの構成へ整理した。以前は`geometry/output/`,

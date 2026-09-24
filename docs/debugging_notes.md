@@ -1124,6 +1124,40 @@ Cu層(4µm)がプロット全体のz方向スケール(~0.6cm)に対して視認
 約1/4の時間で完了し、今後の高統計run（100-200イベント規模）で
 実運用可能であることを確認した。
 
+## 2026-09-24: 電圧1.15倍・5x5タイル設定をproduction conditionに採用、genuine plane-crossing解析を初めて実行
+
+GitHub issue #8（README/debugging_notes同期）の作業で、ユーザーへ「baseline
+電圧(1.0x)と電圧1.15倍設定のどちらをproduction conditionとするか」を確認し、
+**1.15倍設定（`triple_gem_field_v1.15x_n5`、GEM2/GEM3局所増幅比>10倍達成）を
+現在のproduction conditionとして正式採用**することが決まった（README.md
+「現在のproduction condition」節に反映済み）。
+
+これまでこの1.15x設定に対しては局所増幅比（`gem_avalanche`の`GetAvalancheSize`
+ベース）しか報告しておらず、genuine plane-crossing analysis
+（`analyze_plane_crossings.py`、GEM1-extracted cohortのfunnel・最終fate等）は
+未実行だった。既存の50イベントbatch run出力
+（`results/root/triple_gem_field_v1.15x_n5_avalanche.root`）に対して初めて実行し、
+以下を確認した（このファイルは`macros/run_info.hh`導入前に生成されたため
+"RunInfo" treeを持たず、`analyze_plane_crossings.py`の`n_cells`はCLI引数で
+明示的に`5`を指定した）:
+
+- 50イベント、10910電子（unique event,track pairs）
+- GEM1-extracted cohort（GEM1底面を実際に通過）: 2286/10910 (21.0%)
+- funnel: T1 25%→40.7%, T1 50%→37.0%, T1 75%→32.0%, GEM2 top-50um→27.2%,
+  GEM2 top-10um→26.7%, GEM2ホール進入→10.5% (cohortの10.5%、reached GEM2
+  top-10umの39.5%)、GEM2 bottom→2.0%、GEM3 top→0.1%（2電子）、
+  GEM3 bottom→0.0%（0電子、GEM3を完全通過した電子は今回の50イベントでは無し）
+- 最終fateの63.3%がtransfer gap 1でStatusLeftDriftMedium、25.9%がGEM1内、
+  8.9%がGEM2内
+
+baseline(1.0x)・150イベントでの結論（「GEM2完全通過28件、GEM3到達3件」、
+上の2026-09-24節）と単純比較すると、絶対数・相対比率ともに1.15x側の方が
+低く見えるが、統計量（50 vs 150イベント）も条件（局所増幅比を大きく変えている
+ため電子数分布自体が異なる）も異なり、直接比較には注意が必要 -- 両条件を
+揃えた体系的な比較はGitHub issue #7のスコープ。ここでは「production
+conditionとして初めてgenuine plane-crossing解析を実行し、値を記録した」
+という事実のみを残す。
+
 ## パイプライン構築時に踏んだ落とし穴（Gmsh → Elmer → Garfield++）
 
 こちらは物理の問題ではなく、素朴にハマったバグ・仕様。同種の変更をする際は再確認。
