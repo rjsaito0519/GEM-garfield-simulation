@@ -37,7 +37,13 @@
  *     globally unique identifier.
  *
  * Output: "<baseName>_avalanche.root", tree "Trajectories", branches
- *   event,track,x,y,z,t,energy,status
+ *   event,track,x,y,z,t,energy,status. Also writes a "RunInfo" tree (see
+ *   run_info.hh, GitHub issue #6 item 1) recording this run's own
+ *   conditions -- note that gem_avalanche.cpp writes its own "RunInfo" to
+ *   the same file, so if both macros are run against the same mesh/output
+ *   dir, "RunInfo" ends up describing whichever one ran most recently, not
+ *   both; "Endpoints"/"Trajectories" are unaffected since each macro only
+ *   purges its own tree name.
  * (one entry per recorded path point; "track" is a per-event index into
  * AvalancheMicroscopic::GetElectrons(), not a globally unique ID -- pair
  * (event,track) to identify one electron's full path). "status" is that
@@ -68,6 +74,7 @@
 #include "Garfield/Sensor.hh"
 
 #include "model_info.hh"
+#include "run_info.hh"
 
 using namespace Garfield;
 
@@ -220,6 +227,34 @@ int main(int argc, char* argv[]) {
                << "\n";
   }
   trajectoriesTree.Write();
+
+  // Record the conditions this run actually used, alongside the data --
+  // see run_info.hh and GitHub issue #6 item 1.
+  gem::WriteRunInfo(rootFile, {
+      {"executable", "export_avalanche_trajectories"},
+      {"git_commit_hash", GEM_GIT_COMMIT_HASH},
+      {"mesh_dir", argv[1]},
+      {"geometry_type", baseName},
+      {"gas_file", gasFile},
+      {"gas_temperature_k", std::to_string(gas.GetTemperature())},
+      {"gas_pressure_torr", std::to_string(gas.GetPressure())},
+      {"gas_material_index", std::to_string(geo.gas_material_index)},
+      {"n_events", std::to_string(nEvents)},
+      {"event_offset", std::to_string(eventOffset)},
+      {"collision_steps", std::to_string(collisionSteps)},
+      {"z_sensor_min_cm", std::to_string(zSensorMin)},
+      {"z_sensor_max_cm", std::to_string(zSensorMax)},
+      {"z_injection_cm", std::to_string(zInjection)},
+      {"x_half_cm", std::to_string(xHalfCm)},
+      {"y_half_cm", std::to_string(yHalfCm)},
+      {"e0_ev", std::to_string(e0)},
+      {"injection_radius_cm", std::to_string(injectionRadiusCm)},
+      {"avalanche_size_limit", std::to_string(kAvalancheSizeLimit)},
+      {"n_events_at_avalanche_size_limit", std::to_string(nEventsAtCap)},
+      {"rng_seed", hasExplicitSeed ? std::to_string(seed) : "auto (process-default)"},
+      {"model_info_json", gem::LoadModelInfoJsonRaw(argv[1], baseName)},
+  });
+
   rootFile->Close();
   std::cout << "Wrote " << rootPath << " (tree \"Trajectories\")\n";
   std::cout << "Avalanche size limit (" << kAvalancheSizeLimit << ") hit in " << nEventsAtCap

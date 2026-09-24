@@ -12,6 +12,9 @@
  * "Endpoints" cycles purged first, so re-running this macro replaces its
  * own tree without disturbing a sibling "Trajectories" tree that
  * export_avalanche_trajectories.cpp may have written to the same file.
+ * Also writes a "RunInfo" TTree recording the run's actual conditions
+ * (gas file, geometry, RNG seed, git commit, full model_info.json, ...) --
+ * see run_info.hh and GitHub issue #6 item 1.
  *
  * The mesh/result base name is taken from the last path component of the
  * mesh directory (e.g. "single_gem_field" or "triple_gem_field"), matching
@@ -64,6 +67,7 @@
 #include "Garfield/ViewDrift.hh"
 
 #include "model_info.hh"
+#include "run_info.hh"
 
 using namespace Garfield;
 
@@ -74,9 +78,19 @@ int main(int argc, char* argv[]) {
                  "[e0_eV] [injectionRadiusCm] [rootOutDir] [imgOutDir]\n";
     return 1;
   }
-  const std::string meshDir = std::string(argv[1]) + "/";
-  const std::string baseName = std::filesystem::path(argv[1]).filename().string();
-  const gem::ModelGeometryInfo geo = gem::LoadModelGeometryInfo(argv[1], baseName);
+  // Captured once here, before TApplication is constructed below: its
+  // constructor is documented to strip any argv entries it recognizes as
+  // its own options, which can shift/mutate argv -- confirmed directly
+  // (2026-09-24, GitHub issue #6 item 1 work): a *second* argv[1] read
+  // after that point returned a different, wrong value even though this
+  // first read (and everything else in this function) uses the same
+  // argv[1] and worked fine. Every later use of "the mesh dir path as
+  // given on the command line" must go through this variable, not argv[1]
+  // directly.
+  const std::string meshDirArg = argv[1];
+  const std::string meshDir = meshDirArg + "/";
+  const std::string baseName = std::filesystem::path(meshDirArg).filename().string();
+  const gem::ModelGeometryInfo geo = gem::LoadModelGeometryInfo(meshDirArg, baseName);
   const std::string gasFile = argv[2];
   const int nEvents = std::atoi(argv[3]);
   const double zSensorMin = std::stod(argv[4]);
@@ -254,6 +268,33 @@ int main(int argc, char* argv[]) {
     }
   }
   endpointsTree.Write();
+
+  // Record the conditions this run actually used, alongside the data --
+  // see run_info.hh and GitHub issue #6 item 1.
+  gem::WriteRunInfo(rootFile, {
+      {"executable", "gem_avalanche"},
+      {"git_commit_hash", GEM_GIT_COMMIT_HASH},
+      {"mesh_dir", meshDirArg},
+      {"geometry_type", baseName},
+      {"gas_file", gasFile},
+      {"gas_temperature_k", std::to_string(gas.GetTemperature())},
+      {"gas_pressure_torr", std::to_string(gas.GetPressure())},
+      {"gas_material_index", std::to_string(geo.gas_material_index)},
+      {"n_events", std::to_string(nEvents)},
+      {"z_sensor_min_cm", std::to_string(zSensorMin)},
+      {"z_sensor_max_cm", std::to_string(zSensorMax)},
+      {"z_injection_cm", std::to_string(zInjection)},
+      {"x_half_cm", std::to_string(xHalfCm)},
+      {"y_half_cm", std::to_string(yHalfCm)},
+      {"e0_ev", std::to_string(e0)},
+      {"injection_radius_cm", std::to_string(injectionRadiusCm)},
+      {"max_electron_energy_ev", std::to_string(maxElectronEnergyEv)},
+      {"avalanche_size_limit", std::to_string(kAvalancheSizeLimit)},
+      {"n_events_at_avalanche_size_limit", std::to_string(nEventsAtCap)},
+      {"rng_seed", hasExplicitSeed ? std::to_string(seed) : "auto (process-default)"},
+      {"model_info_json", gem::LoadModelInfoJsonRaw(meshDirArg, baseName)},
+  });
+
   rootFile->Close();
   std::cout << "Wrote per-endpoint data to " << rootPath << " (tree \"Endpoints\")\n";
 

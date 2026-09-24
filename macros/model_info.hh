@@ -20,6 +20,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 
@@ -51,12 +52,16 @@ struct ModelGeometryInfo {
 // line (argv[1], no trailing slash needed/assumed); baseName is its last
 // path component, exactly as every macro already derives it via
 // std::filesystem::path(argv[1]).filename().string().
-inline ModelGeometryInfo LoadModelGeometryInfo(const std::string& meshDirArg,
-                                                const std::string& baseName) {
+inline std::filesystem::path ResolveModelInfoJsonPath(const std::string& meshDirArg,
+                                                        const std::string& baseName) {
   const std::filesystem::path resultsDir =
       std::filesystem::path(meshDirArg).parent_path().parent_path();
-  const std::filesystem::path path =
-      resultsDir / "json" / (baseName + "_model_info.json");
+  return resultsDir / "json" / (baseName + "_model_info.json");
+}
+
+inline ModelGeometryInfo LoadModelGeometryInfo(const std::string& meshDirArg,
+                                                const std::string& baseName) {
+  const std::filesystem::path path = ResolveModelInfoJsonPath(meshDirArg, baseName);
   std::ifstream in(path);
   if (!in) {
     throw std::runtime_error("Could not open model info file: " + path.string());
@@ -73,6 +78,26 @@ inline ModelGeometryInfo LoadModelGeometryInfo(const std::string& meshDirArg,
       g.at("z_domain_max_cm").get<double>(),
       gasMaterialIndex,
   };
+}
+
+// The full, unparsed model_info.json content, for embedding verbatim into a
+// simulation output's RunInfo tree (see run_info.hh, GitHub issue #6 item 1)
+// -- kept as one opaque blob rather than flattened into individual RunInfo
+// keys because single-GEM and triple-GEM model_info.json have different
+// "geometry" shapes (e.g. only the latter has a "layers" list), and a fixed
+// RunInfo schema would either need per-geometry-type branches or silently
+// drop fields. This is the single source of truth (this same file) already
+// read by LoadModelGeometryInfo, just not parsed down to individual fields.
+inline std::string LoadModelInfoJsonRaw(const std::string& meshDirArg,
+                                         const std::string& baseName) {
+  const std::filesystem::path path = ResolveModelInfoJsonPath(meshDirArg, baseName);
+  std::ifstream in(path);
+  if (!in) {
+    throw std::runtime_error("Could not open model info file: " + path.string());
+  }
+  std::ostringstream buf;
+  buf << in.rdbuf();
+  return buf.str();
 }
 
 }  // namespace gem

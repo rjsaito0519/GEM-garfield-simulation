@@ -160,6 +160,19 @@
     ディレクトリを作るだけなので、symlinkが無くても動く自体は動くが、
     home配下の容量を消費してしまう）。
 
+21. **`TApplication app("app", &argc, argv);`はargv自体を書き換えうる。** ROOT/X11
+    が認識する自前のオプションをargvから取り除く仕様のため、`TApplication`を
+    構築した後で`argv[N]`を再読み込みすると、構築前に読んだ同じ`argv[N]`と
+    違う値が返ってくることがある（2026-09-24、GitHub issue #6 item 1の
+    RunInfo tree実装中に`gem_avalanche.cpp`で直接踏んだ: `TApplication`構築
+    より前の`argv[1]`読み取り（`LoadModelGeometryInfo`用）は正しく動くのに、
+    構築後にまた`argv[1]`を読む2箇所目が別物になり、
+    `Could not open model info file: ../../json/...`という壊れたパスで
+    落ちた）。対策は、コマンドライン引数を`main()`の先頭（`TApplication`構築
+    より前）で一度だけ`std::string`にコピーし、以降は常にそのコピーを使う
+    こと（`argv[]`を直接再読みしない）。`export_avalanche_trajectories.cpp`
+    は`TApplication`を構築しないマクロなのでこの問題自体は起きない。
+
 ## Garfield++の再ビルド（ROOTバージョンを変えた場合）
 
 Garfield++はROOTとABI互換性がある状態でリンクされている必要がある。ROOTを

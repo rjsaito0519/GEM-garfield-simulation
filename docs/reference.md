@@ -159,6 +159,41 @@ with uproot.open("results/root/triple_gem_field_avalanche.root") as f:
 少数イベント推奨（`view_gem_avalanche_cross_section.cpp`と同じ理由:
 100イベント分の全経路を出すと可視化に使えないほど巨大になる）。
 
+### `RunInfo` (macros/gem_avalanche.cpp と export_avalanche_trajectories.cpp が書く)
+
+2026-09-24追加（GitHub issue #6 item 1）。そのrunで実際に使われた条件を、
+key/value文字列ペア1つにつき1エントリで記録する固定でないスキーマ
+（`macros/run_info.hh`参照）。single-GEM/triple-GEMで`model_info.json`の
+`geometry`ブロックの形が違う（後者のみ`layers`を持つ）ため、個々の
+フィールドに分解せず`model_info_json`キーの下に元のJSON全体をそのまま
+埋め込んでいる。
+
+| key | 意味 |
+|---|---|
+| `executable` | `"gem_avalanche"` / `"export_avalanche_trajectories"` |
+| `git_commit_hash` | ビルド時（`cmake`実行時点、ビルドの度ではない）のgit commit hash |
+| `mesh_dir`, `geometry_type` | argv[1]そのもの、およびそのbaseName |
+| `gas_file`, `gas_temperature_k`, `gas_pressure_torr` | 使用した`.gas`ファイルと、`MediumMagboltz::LoadGasFile()`後に実際に読み込まれた温度・圧力 |
+| `gas_material_index` | `model_info.hh`の`geo.gas_material_index`（GitHub issue #6 item 3） |
+| `n_events`, `z_sensor_min_cm`, `z_sensor_max_cm`, `z_injection_cm`, `x_half_cm`, `y_half_cm`, `e0_ev`, `injection_radius_cm` | CLI引数そのまま |
+| `avalanche_size_limit`, `n_events_at_avalanche_size_limit` | `EnableAvalancheSizeLimit()`の値と、そのrunで実際に上限に達したイベント数 |
+| `rng_seed` | 明示seedを渡した場合はその値、渡さなければ`"auto (process-default)"` |
+| `model_info_json` | `<baseName>_model_info.json`の生の中身（geometry・physical_group_ids・electrode_potentials_v・dielectric_relative_permittivity等すべて含む） |
+
+`gem_avalanche`/`export_avalanche_trajectories`はどちらも自分の`RunInfo`
+tree（既存cycleを`Delete("RunInfo;*")`で消してから書き直す）を持つため、
+同じ出力ファイルに両方を続けて実行すると、`RunInfo`は最後に実行した方の
+条件だけを反映する（`Endpoints`/`Trajectories`は互いに影響しない）。
+
+Pythonから読む例:
+```python
+import uproot
+with uproot.open("results/root/triple_gem_field_avalanche.root") as f:
+    arr = f["RunInfo"].arrays(["key", "value"], library="np")
+    run_info = dict(zip(arr["key"], arr["value"]))
+    print(run_info["rng_seed"], run_info["git_commit_hash"])
+```
+
 ## 5. KEKCC batch (bsub) でのavalanche計算並列化 (`batch/`)
 
 `export_avalanche_trajectories`のavalanche計算はイベント間で状態を共有
