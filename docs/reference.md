@@ -279,12 +279,32 @@ python3 batch/run_avalanche_batch.py results/mesh/<baseName> resources/ar_ch4_90
 python3 batch/run_avalanche_batch.py ... --njobs 10 --queue s
 ```
 
-各ジョブの中間ファイル・bsubログは`results/root/.batch_tmp/<baseName>/partNNN/`
-に残る（デバッグ用、自動削除しない）。**注意**: バッチジョブ投入
-（`bsub`実行）はプロジェクトの安全ルール上、ユーザーが明示的にその場で
-依頼したときのみ行う（`--dry-run`なしでの実行は自動では行わない）。
-Elmer solve自体（MPI分割等）はこの枠組みの対象外 — 単一の線形システムを
-解く工程であり、avalanche計算のような単純な並列分割ができないため。
+各ジョブの中間ファイル・bsubログは`results/root/.batch_tmp/<baseName>/<run_id>/partNNN/`
+に残る（`run_id`は実行ごとのタイムスタンプ、デバッグ用、自動削除しない
+-- 2026-09-25、GitHub issue #9で実行ごとに独立したディレクトリに変更）。
+**注意**: バッチジョブ投入（`bsub`実行）はプロジェクトの安全ルール上、
+ユーザーが明示的にその場で依頼したときのみ行う（`--dry-run`なしでの
+実行は自動では行わない）。Elmer solve自体（MPI分割等）はこの枠組みの
+対象外 — 単一の線形システムを解く工程であり、avalanche計算のような
+単純な並列分割ができないため。
+
+## 5.5. Efficiency の定義（GitHub issue #7 item 5 / #12 item 5）
+
+複数の解析スクリプトが別々のefficiency量を計算しているため、混同を
+避けるためにここで一箇所にまとめる。
+
+| 用語 | 定義 | 測定方法 |
+|---|---|---|
+| **Collection efficiency** | GEM上方の広い一様領域から注入された一次電子のうち、実際にホール開口部へ入った割合 | `geometry/analyze_collection_efficiency.py`。**単独GEM（一様上方電場）でのみ意味を持つ**定義 -- 3段スタック中のGEM2/GEM3は前段の非一様な雪崩出力を受け取るため、この意味でのcollection efficiencyは定義できない（下記「次GEM進入率」参照） |
+| **Local multiplication** | collectionされた一次電子1個あたりの、そのGEM内での二次電子生成数（`track`数） | `analyze_collection_efficiency.py`の`Local multiplication`出力 |
+| **Extraction efficiency** | collectionされた一次電子のうち、そのGEMの底面を実際に下向きに通過した（genuine crossing）割合 | `analyze_collection_efficiency.py`の`Extraction efficiency`出力、または`analyze_single_gem_plane_crossings.py` |
+| **Transfer efficiency** | あるGEMを抜けた電子のうち、transfer gapを生き残って次段のGEM近傍に到達した割合 | `analyze_plane_crossings.py`のfunnel（例: "T1 75%"等の中間平面通過率） |
+| **次GEM進入率 (next-GEM collection)** | 3段スタックのembedded文脈で、あるGEMの実際の（非一様な）雪崩出力のうち、次GEMの実ホール開口部へ入った割合 -- 上記collection efficiencyとは別概念、cascade特有の量 | `analyze_plane_crossings.py`の"GEM2 top (hole entrance)"等 |
+| **Effective gain** | 1個の一次電子（あるいは1個の実イベント）あたり、最終的にreadout/induction面に到達した電子数 -- `AvalancheMicroscopic::GetAvalancheSize()`が返す"gain"（`ne`）とは異なる。`GetAvalancheSize()`は雪崩木全体で生成された総電子数（後で吸収されるものも含む）であり、detector effective gainではない | まだ標準出力化されていない（issue #12 item 1のavalanche size limit convergence確認後に整備予定） |
+
+`macros/gem_avalanche.cpp`のコメントは`GetAvalancheSize()`の`ne`を
+"gain"（生成総数）と呼び、"detector effective gain"とは呼ばないよう
+既に整理済み（2026-09-24）。
 
 ## 6. 関連ドキュメント
 
