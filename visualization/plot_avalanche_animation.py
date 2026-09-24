@@ -26,7 +26,10 @@ Usage:
     python3 plot_avalanche_animation.py <avalanche.root> <event> [label]
     label: text shown in the title (e.g. "1.15x voltage"); defaults to the
     root file's base name.
-Output: results/img/<baseName>_event<N>_avalanche_{3d,side}.gif
+Output: results/img/<baseName>_event<N>_avalanche.gif -- one combined
+    animation, oblique and true side-on (elev=0) 3D panels side by side
+    sharing one electron-count panel below (2026-09-25: previously two
+    separate _3d.gif/_side.gif files).
 """
 
 import os
@@ -94,10 +97,18 @@ def _style_3d_axes(ax, view: str):
     ax.set_zlabel("z [cm]", color="white")
     if view == "perspective":
         ax.view_init(elev=10, azim=50)
-    else:  # side / cross-section-like view, looking along y
+    else:  # side / cross-section-like view, looking directly along y
         ax.set_proj_type("ortho")
-        ax.view_init(elev=4, azim=-90)  # small nonzero elev: exactly edge-on (elev=0)
-        ax.set_yticklabels([])          # makes mplot3d's depth-sort degenerate/vanish
+        # Exactly edge-on (elev=0) makes mplot3d's depth-sort degenerate --
+        # the GEM copper/dielectric surfaces render mostly invisible instead
+        # of properly layered (see module docstring's computed_zorder note;
+        # this is a further, separate mplot3d quirk at elev=0 specifically).
+        # A small nonzero elev (e.g. 4) avoided that, but the user asked for
+        # a genuinely true side-on view (2026-09-25) and is fine with the
+        # GEM structure not being visible here -- the side-by-side
+        # perspective panel still shows it. elev=0 it is.
+        ax.view_init(elev=0, azim=-90)
+        ax.set_yticklabels([])  # y is the (hidden) depth axis in this view
     ax.set_facecolor("black")
     ax.xaxis.pane.set_facecolor((0, 0, 0, 1))
     ax.yaxis.pane.set_facecolor((0, 0, 0, 1))
@@ -134,8 +145,13 @@ def _birth_death_step(t: np.ndarray, track: np.ndarray):
     return alive_times, alive_cum
 
 
-def render(view: str, out_path: str, x, y, z, t, alive_times, alive_cum,
+def render(out_path: str, x, y, z, t, alive_times, alive_cum,
            label: str, n_frames: int = 100, fps: int = 20, age_window_ns: float = 40.0):
+    """One combined GIF: perspective (oblique) and true side-on (elev=0)
+    3D panels side by side, sharing one electron-count panel below --
+    replaces the earlier two-separate-GIF layout at the user's request
+    (2026-09-25), so the oblique and side views can be compared directly
+    without needing the GEM structure to stay visible in the side view."""
     holes_um = [(hx * 1e4, hy * 1e4) for hx, hy in hole_centers_tiled(0.014, 5, 5)]
     holes_arr = np.array(holes_um)
     gx = np.linspace(-VIEW_HALF_X, VIEW_HALF_X, _GRID_N)
@@ -148,14 +164,17 @@ def render(view: str, out_path: str, x, y, z, t, alive_times, alive_cum,
     frac = np.linspace(0, 1, n_frames)
     frame_times = t_max * frac**1.6
 
-    fig = plt.figure(figsize=(7.2, 10.5))
+    fig = plt.figure(figsize=(13.0, 7.6))
     fig.patch.set_facecolor("black")
-    gs = fig.add_gridspec(5, 1, height_ratios=[4, 4, 4, 0.15, 1.1], hspace=0.05)
-    ax = fig.add_subplot(gs[0:3, 0], projection="3d")
-    ax_count = fig.add_subplot(gs[4, 0])
+    gs = fig.add_gridspec(2, 2, height_ratios=[5.5, 1.3], hspace=0.10, wspace=0.02)
+    ax_persp = fig.add_subplot(gs[0, 0], projection="3d")
+    ax_side = fig.add_subplot(gs[0, 1], projection="3d")
+    ax_count = fig.add_subplot(gs[1, :])
 
-    _style_3d_axes(ax, view)
-    _draw_gem_geometry(ax, GX, GY, holes_arr)
+    _style_3d_axes(ax_persp, "perspective")
+    _style_3d_axes(ax_side, "side")
+    _draw_gem_geometry(ax_persp, GX, GY, holes_arr)
+    _draw_gem_geometry(ax_side, GX, GY, holes_arr)
 
     ax_count.set_facecolor("black")
     ax_count.set_xlim(0, t_max)
@@ -166,10 +185,12 @@ def render(view: str, out_path: str, x, y, z, t, alive_times, alive_cum,
     for spine in ax_count.spines.values():
         spine.set_color("white")
 
-    title = ax.set_title("", color="white")
+    title = fig.suptitle("", color="white", y=0.98)
+    ax_persp.set_title("oblique", color="white", fontsize=9, y=0.97)
+    ax_side.set_title("side (x-z)", color="white", fontsize=9, y=0.97)
     alive_line, = ax_count.plot([], [], color=ELECTRON_COLOR, lw=2.0, drawstyle="steps-post")
     marker, = ax_count.plot([], [], "o", color=ELECTRON_COLOR, ms=5)
-    scatter_holder = {"artist": None}
+    scatter_holders = {"persp": None, "side": None}
 
     def draw_frame(i):
         T = frame_times[i]
@@ -179,21 +200,32 @@ def render(view: str, out_path: str, x, y, z, t, alive_times, alive_cum,
         colors = np.tile(ELECTRON_COLOR, (sel.sum(), 1))
         rgba = np.concatenate([colors, alpha[:, None]], axis=1)
         size = 3.0 + 4.0 * (1.0 - age)
-        if scatter_holder["artist"] is not None:
-            scatter_holder["artist"].remove()
-        scatter_holder["artist"] = ax.scatter(
-            x[sel], y[sel], z[sel], c=rgba, s=size, linewidths=0, depthshade=False, zorder=100)
+        for key, ax_obj in (("persp", ax_persp), ("side", ax_side)):
+            if scatter_holders[key] is not None:
+                scatter_holders[key].remove()
+            scatter_holders[key] = ax_obj.scatter(
+                x[sel], y[sel], z[sel], c=rgba, s=size, linewidths=0,
+                depthshade=False, zorder=100)
         title.set_text(f"{label}: t = {T:6.1f} / {t_max:.1f} ns")
 
         idx_alive = int(np.searchsorted(alive_times, T, side="right"))
         n_alive = int(alive_cum[idx_alive - 1]) if idx_alive > 0 else 0
+        # Always extend the line's last point out to the current frame time
+        # T (not just to the last actual birth/death event before T) --
+        # without this, drawstyle="steps-post" only draws up to whatever
+        # event time happens to precede T, so during any stretch where the
+        # population doesn't change the line visibly stops short of the
+        # current time and then jumps forward once the next event finally
+        # occurs, looking like a broken/reconnecting line (reported
+        # 2026-09-25). The count is unchanged during that stretch, but a
+        # point still belongs at (T, n_alive) so the line is continuous.
         alive_line.set_data(
-            np.concatenate([[0.0], alive_times[:idx_alive]]),
-            np.concatenate([[0.0], alive_cum[:idx_alive]]),
+            np.concatenate([[0.0], alive_times[:idx_alive], [T]]),
+            np.concatenate([[0.0], alive_cum[:idx_alive], [n_alive]]),
         )
         marker.set_data([T], [n_alive])
         ax_count.set_title(f"{n_alive} electrons", color=ELECTRON_COLOR, fontsize=10)
-        return (scatter_holder["artist"],)
+        return tuple(scatter_holders.values())
 
     from matplotlib.animation import FuncAnimation, PillowWriter
 
@@ -216,9 +248,7 @@ def main() -> None:
     x, y, z, t, track = _load_event(root_path, event)
     alive_times, alive_cum = _birth_death_step(t, track)
 
-    render("perspective", os.path.join(IMG_DIR, f"{base_name}_event{event}_avalanche_3d.gif"),
-           x, y, z, t, alive_times, alive_cum, label)
-    render("side", os.path.join(IMG_DIR, f"{base_name}_event{event}_avalanche_side.gif"),
+    render(os.path.join(IMG_DIR, f"{base_name}_event{event}_avalanche.gif"),
            x, y, z, t, alive_times, alive_cum, label)
 
 
