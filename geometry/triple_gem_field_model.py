@@ -246,11 +246,39 @@ def build_triple_gem_field_model(config: TripleGemTestConfig) -> TripleGemFieldM
     )
 
     electrode_potentials_v = _electrode_potentials_v(config)
+    # Beyond the fields C++/model_info.hh actually consume (pitch/half-extent/
+    # z-domain, unchanged above), also record the full simulation condition
+    # here so analysis scripts can read it back instead of reconstructing a
+    # fresh TripleGemTestConfig() that could silently drift out of sync with
+    # what was actually built (see GitHub issue #4/#6, 2026-09-24).
+    layers_info = [
+        {
+            "name": layer.name,
+            "z_center_cm": z_center,
+            "z_top_cm": z_center + _half_extent_cm(layer),
+            "z_bottom_cm": z_center - _half_extent_cm(layer),
+            "voltage_v": layer.voltage_v,
+            "copper_thickness_cm": layer.params.copper_thickness_cm,
+            "dielectric_thickness_cm": layer.params.dielectric_thickness_cm,
+            "hole_inner_radius_cm": layer.params.hole_inner_radius_cm,
+            "hole_outer_radius_cm": layer.params.hole_outer_radius_cm,
+        }
+        for layer, z_center in zip(config.layers, z_centers)
+    ]
     geometry_info = {
         "pitch_cm": pitch_cm,
         "half_extent_x_cm": half_extent_x_cm,
         "half_extent_y_cm": half_extent_y_cm,
         "z_domain_min_cm": z_induction_plane,
         "z_domain_max_cm": z_drift_plane,
+        "n_cells_x": config.n_cells_x,
+        "n_cells_y": config.n_cells_y,
+        "drift_gap_cm": config.drift_gap_cm,
+        "drift_field_v_per_cm": config.drift_field_v_per_cm,
+        "transfer_gap_cm": config.transfer_gap_cm,
+        "transfer_field_v_per_cm": config.transfer_field_v_per_cm,
+        "induction_gap_cm": config.induction_gap_cm,
+        "induction_field_v_per_cm": config.induction_field_v_per_cm,
+        "layers": layers_info,
     }
     return TripleGemFieldModel(physical_group_ids, electrode_potentials_v, geometry_info)

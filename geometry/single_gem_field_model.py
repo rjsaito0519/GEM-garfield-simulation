@@ -220,11 +220,28 @@ def build_single_gem_field_model(
         "DriftPlaneElectrode": v_drift_plane,
         "TransferPlaneElectrode": v_transfer_plane,
     }
+    # Beyond what C++/model_info.hh actually consume (pitch/half-extent/
+    # z-domain, unchanged above), also record the full simulation condition
+    # so analysis scripts can read it back rather than reconstructing a
+    # fresh SingleGemTestConfig() (see GitHub issue #4/#6, 2026-09-24).
     geometry_info = {
         "pitch_cm": gem_params.pitch_cm,
         "half_extent_x_cm": half_extent_x_cm,
         "half_extent_y_cm": half_extent_y_cm,
         "z_domain_min_cm": z_transfer_plane,
         "z_domain_max_cm": z_drift_plane,
+        "n_cells_x": test_config.n_cells_x,
+        "n_cells_y": test_config.n_cells_y,
+        "z_gem_top_cm": z_gem_top,
+        "z_gem_bottom_cm": z_gem_bottom,
+        "copper_thickness_cm": gem_params.copper_thickness_cm,
+        "dielectric_thickness_cm": gem_params.dielectric_thickness_cm,
+        "hole_inner_radius_cm": gem_params.hole_inner_radius_cm,
+        "hole_outer_radius_cm": gem_params.hole_outer_radius_cm,
+        "gem_voltage_v": test_config.gem_voltage_v,
+        "drift_gap_cm": test_config.drift_gap_cm,
+        "drift_field_v_per_cm": test_config.drift_field_v_per_cm,
+        "transfer_gap_cm": test_config.transfer_gap_cm,
+        "transfer_field_v_per_cm": test_config.transfer_field_v_per_cm,
     }
     return SingleGemFieldModel(physical_group_ids, electrode_potentials_v, geometry_info)
