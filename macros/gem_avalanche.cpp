@@ -346,6 +346,11 @@ int main(int argc, char* argv[]) {
       {"y_half_cm", std::to_string(yHalfCm)},
       {"e0_ev", std::to_string(e0)},
       {"injection_radius_cm", std::to_string(injectionRadiusCm)},
+      // Not a CLI parameter (hardcoded downstream), but GitHub issue #11
+      // item 2 asked for injection direction to be recorded alongside
+      // position/radius -- (0,0,-1) matches AvalancheElectron()'s call
+      // below.
+      {"injection_direction", "0,0,-1"},
       {"max_electron_energy_ev", std::to_string(maxElectronEnergyEv)},
       {"avalanche_size_limit", std::to_string(kAvalancheSizeLimit)},
       {"n_events_at_avalanche_size_limit", std::to_string(nEventsAtCap)},

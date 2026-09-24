@@ -278,6 +278,9 @@ int main(int argc, char* argv[]) {
       {"y_half_cm", std::to_string(yHalfCm)},
       {"e0_ev", std::to_string(e0)},
       {"injection_radius_cm", std::to_string(injectionRadiusCm)},
+      // See gem_avalanche.cpp's comment on the same entry (GitHub issue
+      // #11 item 2).
+      {"injection_direction", "0,0,-1"},
       {"avalanche_size_limit", std::to_string(kAvalancheSizeLimit)},
       {"n_events_at_avalanche_size_limit", std::to_string(nEventsAtCap)},
       {"rng_seed", hasExplicitSeed ? std::to_string(seed) : "auto (process-default)"},
