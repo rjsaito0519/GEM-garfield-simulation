@@ -21,7 +21,7 @@
  * Usage: export_avalanche_trajectories <mesh/result dir> <.gas file>
  *          <n events> <zSensorMin> <zSensorMax> <zInjection> <xHalfCm>
  *          <yHalfCm> [e0_eV] [injectionRadiusCm] [output dir] [collisionSteps]
- *          [eventOffset]
+ *          [eventOffset] [seed] [avalancheSizeLimit]
  *   Same argument convention as gem_avalanche.cpp -- the numbers already
  *   used for a given model's gem_avalanche run can be reused here directly.
  *   collisionSteps: real collisions between recorded path points, default
@@ -35,6 +35,11 @@
  *     can be hadd'd together afterward without colliding (event,track)
  *     keys -- every downstream analysis script treats (event,track) as a
  *     globally unique identifier.
+ *   avalancheSizeLimit: see gem_avalanche.cpp's usage docstring for why the
+ *     default (2000) can significantly undercount transmission once
+ *     Penning transfer is on -- same CLI-configurable cap here, same
+ *     Garfield++ drop-without-recording behavior when hit (GitHub issue #7
+ *     item 4).
  *
  * Output: "<baseName>_avalanche.root", tree "Trajectories", branches
  *   event,track,x,y,z,t,energy,status. Also writes a "RunInfo" tree (see
@@ -83,7 +88,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Usage: export_avalanche_trajectories <mesh/result dir> <.gas file> "
                  "<n events> <zSensorMin> <zSensorMax> <zInjection> <xHalfCm> <yHalfCm> "
                  "[e0_eV] [injectionRadiusCm] [output dir] [collisionSteps] [eventOffset] "
-                 "[seed]\n";
+                 "[seed] [avalancheSizeLimit]\n";
     return 1;
   }
   const std::string meshDir = std::string(argv[1]) + "/";
@@ -134,6 +139,9 @@ int main(int argc, char* argv[]) {
   }
   std::cout << "RNG seed: " << (hasExplicitSeed ? std::to_string(seed) : "auto (process-default)")
             << "\n";
+  // See the usage docstring above for why this default (2000) can
+  // significantly undercount transmission once Penning transfer is on.
+  const std::size_t avalancheSizeLimit = argc > 15 ? static_cast<std::size_t>(std::atoi(argv[15])) : 2000;
 
   MediumMagboltz gas;
   if (!gas.LoadGasFile(gasFile)) {
@@ -176,13 +184,12 @@ int main(int argc, char* argv[]) {
   // (every 100 collisions) an interior point gets recorded.
   aval.EnableDriftLines();
   // Same safety cap as gem_avalanche.cpp -- see its comment on the same
-  // call for why. Recorded per event below (GitHub issue #5 item 1) so a
-  // scan that pushes gain high enough to actually hit this can be
-  // detected instead of silently truncating -- at the voltages used so
-  // far (up to 1.15x GEM voltage multiplier) the largest observed event
-  // was 924 tracks, well under this, but that's not guaranteed to hold at
-  // higher voltage.
-  constexpr std::size_t kAvalancheSizeLimit = 2000;
+  // call, and this file's usage docstring, for why. Recorded per event
+  // below (GitHub issue #5 item 1) so a scan that pushes gain high enough
+  // to actually hit this can be detected instead of silently truncating --
+  // routinely hit once Penning transfer was enabled (GitHub issue #7 item
+  // 4), hence this being CLI-configurable rather than a fixed constant.
+  const std::size_t kAvalancheSizeLimit = avalancheSizeLimit;
   aval.EnableAvalancheSizeLimit(kAvalancheSizeLimit);
 
   const std::string rootPath = outDir + baseName + "_avalanche.root";

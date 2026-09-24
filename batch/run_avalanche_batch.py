@@ -24,7 +24,8 @@ Usage:
     python3 run_avalanche_batch.py <mesh/result dir> <.gas file> <n_events_total>
       <zSensorMin> <zSensorMax> <zInjection> <xHalfCm> <yHalfCm>
       [e0_eV] [injectionRadiusCm] [collisionSteps]
-      [--njobs N] [--queue NAME] [--poll-interval SEC] [--dry-run]
+      [--njobs N] [--queue NAME] [--poll-interval SEC]
+      [--avalanche-size-limit N] [--dry-run]
 
 Output: results/root/<baseName>_avalanche.root, exactly as a normal serial
 export_avalanche_trajectories run would produce (so nothing downstream
@@ -88,6 +89,15 @@ def main() -> None:
              "is needed instead of relying on its per-process auto-seeding.",
     )
     parser.add_argument(
+        "--avalanche-size-limit", type=int, default=2000,
+        help="export_avalanche_trajectories' EnableAvalancheSizeLimit() argument "
+             "(default 2000, matching that macro's own default). A capped event's "
+             "still-unprocessed electrons are dropped with no trajectory recorded at "
+             "all, biasing measured transmission fractions downward -- found to be "
+             "hit routinely once Penning transfer was enabled (GitHub issue #7 item "
+             "4); raise this for a run where that bias matters.",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true",
         help="Print what would be submitted/merged; never call bsub or touch the LSF queue.",
     )
@@ -132,7 +142,7 @@ def main() -> None:
             f"{args.mesh_dir} {args.gas_file} {n_events} "
             f"{args.z_sensor_min} {args.z_sensor_max} {args.z_injection} "
             f"{args.x_half_cm} {args.y_half_cm} {args.e0_ev} {args.injection_radius_cm} "
-            f"{part_dir} {args.collision_steps} {offset} {seed}"
+            f"{part_dir} {args.collision_steps} {offset} {seed} {args.avalanche_size_limit}"
         )
         jobs.append({
             "index": i, "n_events": n_events, "offset": offset, "seed": seed,

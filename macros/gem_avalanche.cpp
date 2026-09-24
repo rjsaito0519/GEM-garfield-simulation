@@ -24,6 +24,7 @@
  *                       <zSensorMin> <zSensorMax> <zInjection>
  *                       <xHalfCm> <yHalfCm> [e0_eV] [injectionRadiusCm]
  *                       [rootOutDir] [imgOutDir] [maxElectronEnergyEv] [seed]
+ *                       [avalancheSizeLimit]
  *   zSensorMin/Max: the sensor's z bounds [cm], from the induction/transfer
  *     plane at the bottom to the drift plane at the top (see the model's
  *     printed electrode potentials, or its mesh cross-section plot, for
@@ -43,6 +44,17 @@
  *     to this energy up front, default 0 (= Magboltz's own auto-extension,
  *     which is slow when triggered many times -- see the comment where
  *     this is used).
+ *   avalancheSizeLimit: EnableAvalancheSizeLimit() argument, default 2000.
+ *     A capped event's still-unprocessed electrons are dropped with no
+ *     endpoint recorded at all (confirmed in the installed Garfield++
+ *     source, AvalancheMicroscopic::transportParticleStack: hitting the cut
+ *     does `newParticles.clear(); break;`, not a graceful stop after
+ *     finishing the current generation) -- so a run that hits this cap
+ *     often has a downward bias on any measured transmission/collection
+ *     fraction, not just a capped "gain" number. Found to be hit in the
+ *     majority of events once Penning transfer was enabled (2026-09-24,
+ *     GitHub issue #7 item 4) at the default 2000; raise this for a run
+ *     where that bias matters.
  */
 
 #include <cmath>
@@ -75,7 +87,8 @@ int main(int argc, char* argv[]) {
   if (argc < 9) {
     std::cout << "Usage: gem_avalanche <mesh/result dir> <.gas file> <n events> "
                  "<zSensorMin> <zSensorMax> <zInjection> <xHalfCm> <yHalfCm> "
-                 "[e0_eV] [injectionRadiusCm] [rootOutDir] [imgOutDir]\n";
+                 "[e0_eV] [injectionRadiusCm] [rootOutDir] [imgOutDir] "
+                 "[maxElectronEnergyEv] [seed] [avalancheSizeLimit]\n";
     return 1;
   }
   // Captured once here, before TApplication is constructed below: its
@@ -127,6 +140,9 @@ int main(int argc, char* argv[]) {
     engine.SetSeed(seed);
     Random::SetEngine(engine);
   }
+  // See the usage docstring above for why this default (2000) can
+  // significantly undercount transmission once Penning transfer is on.
+  const int avalancheSizeLimit = argc > 15 ? std::atoi(argv[15]) : 2000;
   std::cout << "RNG seed: " << (hasExplicitSeed ? std::to_string(seed) : "auto (process-default)")
             << "\n";
 
@@ -194,8 +210,12 @@ int main(int argc, char* argv[]) {
   // single bad event cannot hang the whole run; GetAvalancheSize() still
   // reports whatever size it reached when cut off -- meaning that reported
   // "gain" is a truncated lower bound, not a genuine final size, for any
-  // event that hits this (tracked and flagged below, GitHub issue #5 item 1).
-  constexpr int kAvalancheSizeLimit = 2000;
+  // event that hits this (tracked and flagged below, GitHub issue #5 item 1;
+  // CLI-configurable since GitHub issue #7 item 4, see this file's usage
+  // docstring -- default unchanged at 2000 for backward compatibility, but
+  // it turned out to be hit far more often once Penning transfer was
+  // enabled).
+  const int kAvalancheSizeLimit = avalancheSizeLimit;
   aval.EnableAvalancheSizeLimit(kAvalancheSizeLimit);
 
   const double t0 = 0.;
