@@ -24,6 +24,7 @@ Usage:
     (single_gem_field, GEM_50UM) standalone run.
 """
 
+import json
 import sys
 
 import numpy as np
@@ -62,17 +63,57 @@ def _birth_region(z_val: float, z_gem_top: float, z_gem_bottom: float) -> str:
     return "transfer gap"
 
 
+def _load_geometry_from_run_info(root_path: str) -> tuple[float, float, float] | None:
+    """(z_gem_top_cm, z_gem_bottom_cm, transfer_gap_cm), read from this
+    file's own "RunInfo" tree's "model_info_json" entry (see
+    macros/run_info.hh, GitHub issue #6 items 1-2) instead of assuming a
+    CLI-selected GEM_50UM/GEM_100UM catalog value and a hardcoded
+    _TRANSFER_GAP_CM still match whatever this file was actually built
+    with (e.g. a non-default transfer-field diagnostic run, see this
+    file's own module docstring). Returns None if unavailable (no RunInfo
+    tree, or an older model_info.json missing these fields) -- caller
+    falls back to the CLI/hardcoded path with its own warning.
+    """
+    with uproot.open(root_path) as f:
+        if "RunInfo" not in f:
+            return None
+        arr = f["RunInfo"].arrays(["key", "value"], library="np")
+    model_info_json_values = [v for k, v in zip(arr["key"], arr["value"]) if k == "model_info_json"]
+    if not model_info_json_values:
+        return None
+    g = json.loads(model_info_json_values[0])["geometry"]
+    if "z_gem_top_cm" not in g or "z_gem_bottom_cm" not in g or "transfer_gap_cm" not in g:
+        return None
+    return g["z_gem_top_cm"], g["z_gem_bottom_cm"], g["transfer_gap_cm"]
+
+
 def main() -> None:
     if len(sys.argv) < 2:
         print("Usage: analyze_single_gem_plane_crossings.py <avalanche.root> [gem_type: 100|50]")
         sys.exit(1)
     root_path = sys.argv[1]
     gem_type = sys.argv[2] if len(sys.argv) > 2 else "100"
-    z_gem_top, z_gem_bottom = _gem_z_bounds(gem_type)
+
+    geometry_from_run_info = _load_geometry_from_run_info(root_path)
+    if geometry_from_run_info is not None:
+        z_gem_top, z_gem_bottom, transfer_gap_cm = geometry_from_run_info
+        print("Geometry: read from this file's own RunInfo tree "
+              "(matches the actual simulation conditions).\n")
+    else:
+        z_gem_top, z_gem_bottom = _gem_z_bounds(gem_type)
+        transfer_gap_cm = _TRANSFER_GAP_CM
+        print(f"WARNING: this file has no usable RunInfo geometry (predates GitHub "
+              f"issue #6 item 1, or predates the geometry_info layer extension) -- "
+              f"falling back to GEM_{gem_type}UM's catalog thickness and the "
+              f"hardcoded default transfer_gap_cm={_TRANSFER_GAP_CM}. This is NOT "
+              f"verified to match the actual conditions this file was produced "
+              f"with (e.g. a non-default transfer-field scan); re-run "
+              f"export_avalanche_trajectories to get a RunInfo tree if that "
+              f"matters here.\n")
 
     planes = [("GEM top", z_gem_top), ("GEM bottom", z_gem_bottom)]
     for frac in _TRANSFER_FRACTIONS:
-        planes.append((f"transfer {int(frac * 100)}%", z_gem_bottom - frac * _TRANSFER_GAP_CM))
+        planes.append((f"transfer {int(frac * 100)}%", z_gem_bottom - frac * transfer_gap_cm))
 
     with uproot.open(root_path) as f:
         tree = f["Trajectories"]

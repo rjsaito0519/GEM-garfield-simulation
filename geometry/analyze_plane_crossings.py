@@ -46,13 +46,20 @@ resolution if needed.
 """
 
 import dataclasses
+import json
 import sys
 
 import numpy as np
 import uproot
 
+from gem_params import GemLayerParams
 from gem_unit_cell import hole_centers_tiled
-from triple_gem_field_model import TripleGemTestConfig, _half_extent_cm, _layer_z_centers
+from triple_gem_field_model import (
+    GemStackLayer,
+    TripleGemTestConfig,
+    _half_extent_cm,
+    _layer_z_centers,
+)
 
 # GarfieldConstants.hh status codes seen in this project so far.
 _STATUS_NAMES = {
@@ -157,18 +164,96 @@ def _interpolated_xy_at_plane(
     return x, y
 
 
+def _load_config_from_run_info(root_path: str) -> TripleGemTestConfig | None:
+    """Reconstruct the TripleGemTestConfig actually used for this run, read
+    from the "RunInfo" tree's "model_info_json" entry (see macros/run_info.hh,
+    GitHub issue #6 items 1-2) instead of assuming today's default
+    TripleGemTestConfig() still matches whatever produced this file.
+
+    Returns None if the file has no "RunInfo" tree (predates that addition
+    -- caller should fall back to the default config with a clear warning,
+    not silently assume they match).
+
+    A batch-merged file (batch/run_avalanche_batch.py's hadd) has one
+    "RunInfo" tree per merged part, all with the same model_info_json (only
+    per-job fields like rng_seed/n_events differ) -- using the first
+    occurrence is correct and deliberate, not an oversight.
+    """
+    with uproot.open(root_path) as f:
+        if "RunInfo" not in f:
+            return None
+        arr = f["RunInfo"].arrays(["key", "value"], library="np")
+    model_info_json_values = [v for k, v in zip(arr["key"], arr["value"]) if k == "model_info_json"]
+    if not model_info_json_values:
+        return None
+    model_info = json.loads(model_info_json_values[0])
+    g = model_info["geometry"]
+    if "layers" not in g:
+        # model_info.json predates the per-layer geometry_info extension
+        # (2026-09-24) -- not enough metadata here to reconstruct a full
+        # TripleGemTestConfig (only pitch/half-extent/z-domain are
+        # guaranteed present in an older file). Caller falls back to the
+        # default-config path with its own warning.
+        return None
+
+    layers = tuple(
+        GemStackLayer(
+            name=layer["name"],
+            params=GemLayerParams(
+                # geometry_info["layers"] only records the stack position's
+                # name ("GEM1"/"GEM2"/"GEM3"), not the underlying
+                # GemLayerParams.name ("GEM_100um"/"GEM_50um") -- cosmetic
+                # only, params.name isn't read by any z-position/pitch/
+                # radius calculation downstream (verified 2026-09-24).
+                name=layer["name"],
+                pitch_cm=g["pitch_cm"],
+                hole_inner_radius_cm=layer["hole_inner_radius_cm"],
+                hole_outer_radius_cm=layer["hole_outer_radius_cm"],
+                copper_thickness_cm=layer["copper_thickness_cm"],
+                dielectric_thickness_cm=layer["dielectric_thickness_cm"],
+                dielectric_relative_permittivity=layer["dielectric_relative_permittivity"],
+            ),
+            voltage_v=layer["voltage_v"],
+        )
+        for layer in g["layers"]
+    )
+    return TripleGemTestConfig(
+        drift_gap_cm=g["drift_gap_cm"],
+        drift_field_v_per_cm=g["drift_field_v_per_cm"],
+        transfer_gap_cm=g["transfer_gap_cm"],
+        transfer_field_v_per_cm=g["transfer_field_v_per_cm"],
+        induction_gap_cm=g["induction_gap_cm"],
+        induction_field_v_per_cm=g["induction_field_v_per_cm"],
+        layers=layers,
+        n_cells_x=g["n_cells_x"],
+        n_cells_y=g["n_cells_y"],
+    )
+
+
 def main() -> None:
     if len(sys.argv) < 2:
         print("Usage: analyze_plane_crossings.py <avalanche.root> [n_cells]")
         sys.exit(1)
     root_path = sys.argv[1]
-    # n_cells: must match the n_cells_x/y the ROOT file's geometry was
-    # actually built with (see build_triple_gem_field_mesh.py's optional
-    # 2nd CLI arg) -- only affects the GEM2 hole-entrance (x,y) check below;
-    # the z-plane thresholds don't depend on tiling density.
+    # n_cells: only used as a fallback when root_path predates the RunInfo
+    # tree (see _load_config_from_run_info) -- must match the n_cells_x/y
+    # the ROOT file's geometry was actually built with in that case (see
+    # build_triple_gem_field_mesh.py's optional 2nd CLI arg); only affects
+    # the GEM2 hole-entrance (x,y) check below, not the z-plane thresholds.
     n_cells = int(sys.argv[2]) if len(sys.argv) > 2 else 3
 
-    config = dataclasses.replace(TripleGemTestConfig(), n_cells_x=n_cells, n_cells_y=n_cells)
+    config = _load_config_from_run_info(root_path)
+    if config is not None:
+        print("Geometry config: read from this file's own RunInfo tree "
+              "(matches the actual simulation conditions).\n")
+    else:
+        config = dataclasses.replace(TripleGemTestConfig(), n_cells_x=n_cells, n_cells_y=n_cells)
+        print("WARNING: this file has no RunInfo tree (predates GitHub issue #6 "
+              "item 1) -- falling back to today's default TripleGemTestConfig() "
+              "(with n_cells overridden from the CLI). This is NOT verified to "
+              "match the actual conditions this file was produced with; "
+              "re-run export_avalanche_trajectories to get a RunInfo tree if "
+              "that matters here.\n")
     planes = _funnel_planes(config)
     birth_regions = _birth_regions(config)
     z_centers = _layer_z_centers(config)
