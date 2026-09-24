@@ -313,6 +313,16 @@ def main() -> None:
     print(f"Updated {model_info_path} with garfield_material_indices: "
           f"{model_info['garfield_material_indices']}")
 
+    # Human-readable full chain, one line per body (GitHub issue #10 item
+    # 3): "Gas -> Elmer Body 1 -> Garfield material 0" -- everything above
+    # already prints the pieces of this separately (Body IDs / dielectrics.dat
+    # slots / garfield_material_indices); this just makes the whole mapping
+    # readable at a glance for a human checking a new mesh's material setup.
+    print("Material mapping:")
+    for name, body_id in sorted(body_ids.items(), key=lambda kv: kv[1]):
+        print(f"  {name} -> Elmer Body {body_id} -> Garfield material {body_id - 1} "
+              f"(relative permittivity {body_permittivities[name]})")
+
 
 if __name__ == "__main__":
     main()
