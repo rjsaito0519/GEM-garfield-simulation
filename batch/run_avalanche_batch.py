@@ -25,9 +25,13 @@ Usage:
       <zSensorMin> <zSensorMax> <zInjection> <xHalfCm> <yHalfCm>
       [e0_eV] [injectionRadiusCm] [collisionSteps]
       [--njobs N] [--queue NAME] [--poll-interval SEC]
-      [--avalanche-size-limit N] [--mem-mb N] [--slots-per-job N] [--dry-run]
+      [--avalanche-size-limit N] [--mem-mb N] [--slots-per-job N]
+      [--output-suffix STR] [--dry-run]
 
-Output: results/root/<baseName>_avalanche.root, exactly as a normal serial
+Output: results/root/<baseName>_avalanche.root (or
+results/root/<baseName><output-suffix>_avalanche.root if --output-suffix is
+given -- needed to run more than one batch against the same mesh, e.g. a
+parameter scan, without each one overwriting the last), exactly as a normal serial
 export_avalanche_trajectories run would produce (so nothing downstream
 needs to change), plus a small "BatchMergeProvenance" tree recording which
 parts/seeds/offsets went into it (GitHub issue #9 item 4). Per-job
@@ -163,6 +167,16 @@ def main() -> None:
              "job needs ~5.6GB RSS (measured locally, 2026-09-24) -- try 2 first, "
              "raise to 3/4/... if a job still gets TERM_MEMLIMIT-killed. Default 1 "
              "(no change from before this option existed).",
+    )
+    parser.add_argument(
+        "--output-suffix", default="",
+        help="Appended to the final output's base name: "
+             "results/root/<baseName><suffix>_avalanche.root instead of the plain "
+             "<baseName>_avalanche.root. Needed to run more than one batch against the same "
+             "mesh (e.g. a parameter scan -- different avalanche_size_limit/collision_steps "
+             "values on the same mesh) without each run overwriting the previous one's final "
+             "output; per-job intermediates already avoid this via run_id, but the final "
+             "merged file's name is otherwise always exactly <baseName>_avalanche.root.",
     )
     parser.add_argument(
         "--dry-run", action="store_true",
@@ -330,7 +344,7 @@ def main() -> None:
             print(f"  job {idx:3d}: {'; '.join(problems)}")
         sys.exit(1)
 
-    final_path = os.path.join(RESULTS_ROOT_DIR, f"{base_name}_avalanche.root")
+    final_path = os.path.join(RESULTS_ROOT_DIR, f"{base_name}{args.output_suffix}_avalanche.root")
     part_paths = [j["part_root_path"] for j in jobs]
     print(f"\nAll {len(part_paths)} parts DONE and RunInfo-consistent. "
           f"Merging into {final_path} ...")
