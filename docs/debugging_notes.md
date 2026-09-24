@@ -1219,8 +1219,56 @@ Preconditioning = ILU2`のICU分解が、メッシュが大きくなったこと
 `results/mesh/triple_gem_field_v1.15x_n7.sif`だけをローカルに直接編集
 （`write_sif.py`は変更していない）してILU1/2000イテレーションに
 戻し、既存のElmerGrid変換済みメッシュを再利用してElmerSolverを
-再実行する実験を実施中（1.15x電圧は以前の1.5-3xスキャンほど極端では
-ないため、ILU1でも収束する可能性がある）。結果は追って記録する。
+再実行する実験を実施した（1.15x電圧は以前の1.5-3xスキャンほど極端では
+ないため、ILU1でも収束する可能性がある）。
+
+**結果: ILU1/2000イテレーションで48回で収束し（元の上限2000の2.4%）、
+正常に`.result`を出力した。** induction領域(z=-0.15cm)での電場を
+`probe_field`で直接確認したところ|E|=3116.95V/cm — 設定値3100V/cm
+（induction_field_v_per_cm）に極めて近く、物理的に妥当な解であることも
+確認済み。この結果を受け、`elmer/write_sif.py`/`run_field_solve.sh`に
+`[preconditioner] [max_iterations]`のオプショナルCLI引数を追加し
+（デフォルトはILU2/20000のまま、既存メッシュの挙動は変えない）、
+大きい/細かくタイル化したメッシュではILU1を指定できるようにした
+（コミット`70ce42e`）。
+
+## 2026-09-24: genuine collection efficiencyの測定を開始（issue #7 item 5、単段GEMテストでGEM2/GEM3タイプを実測）
+
+issue #7 item 5の標準efficiency出力の設計をユーザーと相談し、
+「文献的な意味でのcollection efficiency（上方一様電場から広く集まる
+割合）はGEM1は3段スタックの上方（一様なdrift領域）で実測、GEM2/GEM3は
+前GEMの雪崩出力という不均一な分布から入るため同じ意味では定義できず、
+単段GEMテスト(`single_gem_field`)で別途実測する」方針で合意した。
+
+新しい解析スクリプト`geometry/analyze_collection_efficiency.py`を作成:
+広い（一様面積サンプリング、issue #5 item 5の修正が前提）injection
+半径で注入した主電子ごとに、GEM上面(z_gem_top)を実際のホール開口部
+（タイル化されたホール中心からhole_outer_radius以内）を通って下向きに
+通過したかを判定し、collection efficiency / local multiplication
+（collectedした事象内でのtrack数平均） / extraction efficiencyを
+出力する。
+
+injection半径は六角格子の対称性から隣接ホールとの中間点までの距離
+`pitch/2 = 70µm`を採用（ユーザー承認済み）。`single_gem_field`
+（50µm GEM、baseline電圧1.0x）で50イベント実行した結果:
+
+- Collection efficiency: 49/50 (98.0%) — GEMホールが広い上方領域から
+  非常に高い割合で電子を集めることを確認。GEMの実用上の利点として
+  文献的にも妥当な範囲（高いcollection efficiencyはGEMの特徴の一つ）
+- Local multiplication (collectedした49件でのtrack数平均): 19.53 ± 17.52
+- Extraction efficiency: 34/49 (69.4%)
+
+**注意: これはbaseline電圧(1.0x)、`single_gem_field`（`single_gem_field_v1.15x`
+ではない）での結果。** production条件(1.15x)と揃えるため、
+`single_gem_field_v1.15x`メッシュに対して同じ広いinjectionでの
+batch runを別途実行中（進行中、追って結果を記録）。1.0x側の生ROOTは
+`results/root/single_gem_field_avalanche.root`にそのまま保存されている
+（今後の電圧scan比較用に参考として残す）。
+
+GEM1の3段スタック上方でのcollection efficiency測定、および3段スタック
+embedded文脈でのtransfer/次GEM進入率（`analyze_plane_crossings.py`の
+既存機能で測定可能）との組み合わせによる完全なcharge-flow tableの
+構築は、issue #7 item 5の残作業として進行中。
 
 ## パイプライン構築時に踏んだ落とし穴（Gmsh → Elmer → Garfield++）
 
