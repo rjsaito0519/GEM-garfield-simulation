@@ -25,10 +25,10 @@ import numpy as np
 from mesh_export import export_surface_groups_json
 from triple_gem_field_model import (
     COPPER_RELATIVE_PERMITTIVITY,
-    DIELECTRIC_RELATIVE_PERMITTIVITY,
     GemStackLayer,
     TripleGemTestConfig,
     build_triple_gem_field_model,
+    stack_dielectric_relative_permittivity,
 )
 
 # results/ is this project's single consolidated output tree -- see
@@ -124,7 +124,7 @@ def main() -> None:
             {
                 "physical_group_ids": field_model.physical_group_ids,
                 "electrode_potentials_v": field_model.electrode_potentials_v,
-                "dielectric_relative_permittivity": DIELECTRIC_RELATIVE_PERMITTIVITY,
+                "dielectric_relative_permittivity": stack_dielectric_relative_permittivity(config.layers),
                 "copper_relative_permittivity": COPPER_RELATIVE_PERMITTIVITY,
                 "geometry": field_model.geometry_info,
             },

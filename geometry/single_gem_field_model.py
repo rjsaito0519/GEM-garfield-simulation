@@ -19,9 +19,12 @@ import gmsh
 from gem_params import GemLayerParams
 from gem_unit_cell import build_gem_layer, build_hole_gas_volumes, hole_centers_tiled
 
-# Relative permittivity of the GEM's dielectric (polyimide), a standard
-# textbook value also used by the reference repository (PER_INSULATOR).
-DIELECTRIC_RELATIVE_PERMITTIVITY = 3.5
+# Relative permittivity of the GEM's dielectric insulator is now a field on
+# GemLayerParams (gem_params.py) -- GEM_50UM (PI) vs. GEM_100UM (LCP) can be
+# set independently there, instead of sharing one constant here (GitHub
+# issue #6 item 5). This module used to define its own
+# DIELECTRIC_RELATIVE_PERMITTIVITY = 3.5; callers should use
+# `gem_params.<GEM instance>.dielectric_relative_permittivity` instead.
 
 # Copper's permittivity value is irrelevant to the solution: every exposed
 # copper surface gets a Dirichlet boundary condition (see module docstring),

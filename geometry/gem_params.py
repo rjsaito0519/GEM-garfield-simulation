@@ -21,6 +21,25 @@ class GemLayerParams:
     hole_outer_radius_cm: float  # radius of the hole at the Cu/dielectric interfaces (== Cu hole radius here)
     copper_thickness_cm: float
     dielectric_thickness_cm: float
+    # Relative permittivity of this layer's own dielectric insulator.
+    # GEM_50UM and GEM_100UM below use physically *different* materials
+    # (Table 1: Polyimide (PI) for the 50um GEM, Liquid Crystal Polymer
+    # (LCP) for the 100um GEM -- see docs/debugging_notes.md, "2026-09-24:
+    # GEM孔形状の文献確認"), but this project has no separately-sourced PI
+    # vs. LCP permittivity value yet, so both are currently set to the same
+    # textbook insulator value (3.5) -- a deliberate placeholder, not a
+    # claim that PI and LCP have identical permittivity. This field exists
+    # (instead of one shared module-level constant, as before) so a future
+    # systematic study can set them independently per GEM type without a
+    # structural change -- see GitHub issue #6 item 5. Single-GEM meshes
+    # (single_gem_field_model.py) use this value directly for their one
+    # dielectric body; the 3-GEM stack (triple_gem_field_model.py) still
+    # merges all layers' dielectric volumes into one shared Elmer material
+    # body, so it can only use one shared value today (see that file's
+    # _stack_dielectric_relative_permittivity for the consistency check
+    # this implies) -- fully separating per-layer values there would need
+    # splitting that physical group, a geometry change to discuss first.
+    dielectric_relative_permittivity: float
 
 
 def _um_to_cm(value_um: float) -> float:
@@ -36,6 +55,7 @@ GEM_50UM = GemLayerParams(
     hole_outer_radius_cm=_um_to_cm(55.0 / 2.0),
     copper_thickness_cm=_um_to_cm(4.0),
     dielectric_thickness_cm=_um_to_cm(50.0),
+    dielectric_relative_permittivity=3.5,  # Polyimide (PI) -- see field doc above
 )
 
 GEM_100UM = GemLayerParams(
@@ -45,4 +65,5 @@ GEM_100UM = GemLayerParams(
     hole_outer_radius_cm=_um_to_cm(65.0 / 2.0),
     copper_thickness_cm=_um_to_cm(9.0),
     dielectric_thickness_cm=_um_to_cm(100.0),
+    dielectric_relative_permittivity=3.5,  # Liquid Crystal Polymer (LCP) -- see field doc above
 )

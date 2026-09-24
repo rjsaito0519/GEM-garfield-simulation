@@ -36,7 +36,6 @@ from gem_params import GEM_100UM
 from mesh_export import export_surface_groups_json
 from single_gem_field_model import (
     COPPER_RELATIVE_PERMITTIVITY,
-    DIELECTRIC_RELATIVE_PERMITTIVITY,
     SingleGemTestConfig,
     build_single_gem_field_model,
 )
@@ -164,7 +163,7 @@ def main() -> None:
             {
                 "physical_group_ids": field_model.physical_group_ids,
                 "electrode_potentials_v": field_model.electrode_potentials_v,
-                "dielectric_relative_permittivity": DIELECTRIC_RELATIVE_PERMITTIVITY,
+                "dielectric_relative_permittivity": params.dielectric_relative_permittivity,
                 "copper_relative_permittivity": COPPER_RELATIVE_PERMITTIVITY,
                 "geometry": field_model.geometry_info,
             },

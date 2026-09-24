@@ -27,7 +27,6 @@ import gmsh
 from gem_params import GEM_50UM, GEM_100UM, GemLayerParams
 from gem_unit_cell import build_gem_layer, build_hole_gas_volumes, hole_centers_tiled
 
-DIELECTRIC_RELATIVE_PERMITTIVITY = 3.5
 COPPER_RELATIVE_PERMITTIVITY = 1.0
 _Z_MATCH_TOLERANCE_CM = 1.0e-6
 
@@ -37,6 +36,38 @@ class GemStackLayer:
     name: str
     params: GemLayerParams
     voltage_v: float  # potential drop from this GEM's top to its bottom
+
+
+def stack_dielectric_relative_permittivity(layers: tuple) -> float:
+    """The one relative permittivity value actually used for the stack's
+    combined "Dielectric" Elmer body (see build_triple_gem_field_model's
+    dielectric_volume_tags: all layers' dielectric volumes are merged into
+    a single physical group/material, unlike Copper/electrodes which stay
+    per-layer).
+
+    Each layer's own GemLayerParams.dielectric_relative_permittivity is
+    still recorded per layer in geometry_info["layers"] as metadata (GitHub
+    issue #6 item 5), but the actual Elmer solve can only use one shared
+    value today. If the layers' values were ever set differently (e.g. a
+    future systematic study giving GEM_50UM/GEM_100UM distinct PI/LCP
+    numbers) *without* also splitting the physical group per layer, using
+    an arbitrary one of them here would be a silent physics bug -- so this
+    fails loudly instead, telling the caller the physical group needs
+    splitting first.
+    """
+    values = {layer.params.dielectric_relative_permittivity for layer in layers}
+    if len(values) != 1:
+        raise ValueError(
+            "GEM layers have different dielectric_relative_permittivity values "
+            f"({ {layer.name: layer.params.dielectric_relative_permittivity for layer in layers} }) "
+            "but the 3-GEM stack still merges every layer's dielectric volume into "
+            "one shared Elmer material body (see build_triple_gem_field_model) -- "
+            "using one of these values for all layers would silently misassign the "
+            "others. Split the \"Dielectric\" physical group into one per layer "
+            "(GEM1_Dielectric/GEM2_Dielectric/...) before giving layers distinct "
+            "permittivity values -- see GitHub issue #6 item 5."
+        )
+    return values.pop()
 
 
 @dataclass(frozen=True)
@@ -262,6 +293,10 @@ def build_triple_gem_field_model(config: TripleGemTestConfig) -> TripleGemFieldM
             "dielectric_thickness_cm": layer.params.dielectric_thickness_cm,
             "hole_inner_radius_cm": layer.params.hole_inner_radius_cm,
             "hole_outer_radius_cm": layer.params.hole_outer_radius_cm,
+            # This layer's own GemLayerParams value (metadata only -- the
+            # actual Elmer solve still uses one shared value for all
+            # layers, see stack_dielectric_relative_permittivity above).
+            "dielectric_relative_permittivity": layer.params.dielectric_relative_permittivity,
         }
         for layer, z_center in zip(config.layers, z_centers)
     ]
