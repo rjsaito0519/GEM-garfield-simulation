@@ -1,9 +1,17 @@
 /**
- * Write a "RunInfo" ROOT TTree (one (key, value) string pair per entry) to
+ * Write a per-macro ROOT TTree (one (key, value) string pair per entry) to
  * a simulation output file, recording the conditions actually used for that
  * run -- so an output file is self-describing and analysis code doesn't
  * have to trust that its own re-derived config still matches whatever
  * simulation produced the file (see GitHub issue #6, items 1-3).
+ *
+ * Tree name is caller-supplied ("RunInfoEndpoints" for gem_avalanche.cpp,
+ * "RunInfoTrajectories" for export_avalanche_trajectories.cpp) rather than
+ * one shared "RunInfo" name -- the original single shared name meant
+ * whichever of those two macros ran most recently against a given output
+ * file silently overwrote the other's metadata (last-writer-wins), even
+ * though their sibling data trees ("Endpoints"/"Trajectories") coexist
+ * fine. See GitHub issue #11 item 1.
  *
  * A flexible key/value schema is used deliberately, not a fixed branch per
  * field: single-GEM and triple-GEM model_info.json have different
@@ -34,13 +42,17 @@ using RunInfoEntry = std::pair<std::string, std::string>;
 
 // Opened in UPDATE mode by the caller (same convention as the "Endpoints"/
 // "Trajectories" trees, see export_avalanche_trajectories.cpp) -- any
-// existing "RunInfo" cycles are purged first so re-running a macro against
-// the same output file replaces its RunInfo instead of accumulating stale
-// cycles.
-inline void WriteRunInfo(TFile* file, const std::vector<RunInfoEntry>& entries) {
+// existing cycles of this exact tree_name are purged first so re-running a
+// macro against the same output file replaces its own RunInfo tree instead
+// of accumulating stale cycles, without touching any other macro's
+// same-file RunInfo* tree (see tree_name discussion above).
+inline void WriteRunInfo(TFile* file, const std::string& tree_name,
+                          const std::vector<RunInfoEntry>& entries) {
   file->cd();
-  file->Delete("RunInfo;*");
-  TTree tree("RunInfo", "Simulation run conditions (key, value string pairs) -- see GitHub issue #6 item 1");
+  file->Delete((tree_name + ";*").c_str());
+  TTree tree(tree_name.c_str(),
+             "Simulation run conditions (key, value string pairs) -- see GitHub issue #6 item 1, "
+             "#11 item 1");
   std::string key, value;
   tree.Branch("key", &key);
   tree.Branch("value", &value);

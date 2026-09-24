@@ -164,25 +164,56 @@ def _interpolated_xy_at_plane(
     return x, y
 
 
+def require_trajectories_tree(f, root_path: str, required_branches: list[str]):
+    """The "Trajectories" tree from an open uproot file, after checking it
+    actually exists, has at least one entry, and has every branch the
+    caller needs -- instead of letting a missing/empty/malformed input
+    surface as a confusing IndexError/KeyError deep inside the analysis
+    (GitHub issue #11 item 5). Shared by every script here that reads a
+    "Trajectories" tree, not just analyze_plane_crossings.py itself.
+    """
+    if "Trajectories" not in f:
+        raise ValueError(
+            f"{root_path} has no \"Trajectories\" tree -- wrong file, or "
+            "export_avalanche_trajectories was never run against this mesh/output."
+        )
+    tree = f["Trajectories"]
+    if tree.num_entries == 0:
+        raise ValueError(
+            f"{root_path}'s \"Trajectories\" tree is empty (0 entries) -- nothing to analyze. "
+            "This can happen if every event in this run produced zero recorded trajectory "
+            "points (e.g. all primaries missed the sensor volume) or the run itself failed "
+            "partway through."
+        )
+    missing_branches = [b for b in required_branches if b not in tree.keys()]
+    if missing_branches:
+        raise ValueError(
+            f"{root_path}'s \"Trajectories\" tree is missing branch(es) {missing_branches} -- "
+            f"has {tree.keys()}. Re-run export_avalanche_trajectories if this file predates "
+            "one of these branches being added."
+        )
+    return tree
+
+
 def _load_config_from_run_info(root_path: str) -> TripleGemTestConfig | None:
     """Reconstruct the TripleGemTestConfig actually used for this run, read
-    from the "RunInfo" tree's "model_info_json" entry (see macros/run_info.hh,
+    from the "RunInfoTrajectories" tree's "model_info_json" entry (see macros/run_info.hh,
     GitHub issue #6 items 1-2) instead of assuming today's default
     TripleGemTestConfig() still matches whatever produced this file.
 
-    Returns None if the file has no "RunInfo" tree (predates that addition
+    Returns None if the file has no "RunInfoTrajectories" tree (predates that addition
     -- caller should fall back to the default config with a clear warning,
     not silently assume they match).
 
     A batch-merged file (batch/run_avalanche_batch.py's hadd) has one
-    "RunInfo" tree per merged part, all with the same model_info_json (only
+    "RunInfoTrajectories" tree per merged part, all with the same model_info_json (only
     per-job fields like rng_seed/n_events differ) -- using the first
     occurrence is correct and deliberate, not an oversight.
     """
     with uproot.open(root_path) as f:
-        if "RunInfo" not in f:
+        if "RunInfoTrajectories" not in f:
             return None
-        arr = f["RunInfo"].arrays(["key", "value"], library="np")
+        arr = f["RunInfoTrajectories"].arrays(["key", "value"], library="np")
     model_info_json_values = [v for k, v in zip(arr["key"], arr["value"]) if k == "model_info_json"]
     if not model_info_json_values:
         return None
@@ -268,7 +299,7 @@ def main() -> None:
     gem2_hole_r = gem2.params.hole_outer_radius_cm  # widest point, at the Cu face (top)
 
     with uproot.open(root_path) as f:
-        tree = f["Trajectories"]
+        tree = require_trajectories_tree(f, root_path, ["event", "track", "x", "y", "z"])
         has_status = "status" in tree.keys()
         branches = ["event", "track", "x", "y", "z"] + (["status"] if has_status else [])
         data = tree.arrays(branches, library="np")

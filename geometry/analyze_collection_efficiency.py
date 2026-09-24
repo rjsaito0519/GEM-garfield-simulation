@@ -29,7 +29,7 @@ import sys
 import numpy as np
 import uproot
 
-from analyze_plane_crossings import _crossed, _interpolated_xy_at_plane
+from analyze_plane_crossings import _crossed, _interpolated_xy_at_plane, require_trajectories_tree
 from analyze_single_gem_plane_crossings import _gem_z_bounds
 from gem_params import GEM_50UM, GEM_100UM
 from gem_unit_cell import hole_centers_tiled
@@ -47,13 +47,13 @@ def main() -> None:
     z_gem_top, z_gem_bottom = _gem_z_bounds(gem_type)
 
     with uproot.open(root_path) as f:
-        tree = f["Trajectories"]
+        tree = require_trajectories_tree(f, root_path, ["event", "track", "x", "y", "z"])
         data = tree.arrays(["event", "track", "x", "y", "z"], library="np")
         n_cells = 3
         injection_radius_cm = None
         z_injection = None
-        if "RunInfo" in f:
-            arr = f["RunInfo"].arrays(["key", "value"], library="np")
+        if "RunInfoTrajectories" in f:
+            arr = f["RunInfoTrajectories"].arrays(["key", "value"], library="np")
             run_info = dict(zip(arr["key"], arr["value"]))
             if "injection_radius_cm" in run_info:
                 injection_radius_cm = float(run_info["injection_radius_cm"])

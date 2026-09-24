@@ -46,6 +46,23 @@ if(NOT GEM_GIT_COMMIT_HASH)
     set(GEM_GIT_COMMIT_HASH "unknown")
 endif()
 
+# Same "captured at configure time, not build time" caveat as
+# GEM_GIT_COMMIT_HASH above -- GitHub issue #11 item 2's "git dirty flag"
+# item. `git diff --quiet` (tracked-file changes only, same convention as
+# `git status`'s "modified" -- untracked files aren't considered "dirty"
+# here, matching what commit hash tracking can and can't capture anyway).
+execute_process(
+    COMMAND git diff --quiet
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    RESULT_VARIABLE GEM_GIT_DIRTY_RESULT
+    ERROR_QUIET
+)
+if(GEM_GIT_DIRTY_RESULT EQUAL 0)
+    set(GEM_GIT_DIRTY "false")
+else()
+    set(GEM_GIT_DIRTY "true")
+endif()
+
 function(add_gem_macro name)
     add_executable(${name} ${name}.cpp)
     # ${CMAKE_CURRENT_SOURCE_DIR} lets macros #include "model_info.hh"; the
@@ -72,6 +89,8 @@ add_gem_macro(probe_gas_transport)
 add_gem_macro(trace_field_lines)
 
 # Only the two macros that write a RunInfo tree (run_info.hh, GitHub issue
-# #6 item 1) need the git commit hash.
-target_compile_definitions(gem_avalanche PRIVATE GEM_GIT_COMMIT_HASH="${GEM_GIT_COMMIT_HASH}")
-target_compile_definitions(export_avalanche_trajectories PRIVATE GEM_GIT_COMMIT_HASH="${GEM_GIT_COMMIT_HASH}")
+# #6 item 1) need the git commit hash / dirty flag.
+target_compile_definitions(gem_avalanche PRIVATE
+    GEM_GIT_COMMIT_HASH="${GEM_GIT_COMMIT_HASH}" GEM_GIT_DIRTY="${GEM_GIT_DIRTY}")
+target_compile_definitions(export_avalanche_trajectories PRIVATE
+    GEM_GIT_COMMIT_HASH="${GEM_GIT_COMMIT_HASH}" GEM_GIT_DIRTY="${GEM_GIT_DIRTY}")

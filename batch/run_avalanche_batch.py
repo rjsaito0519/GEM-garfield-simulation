@@ -62,14 +62,14 @@ DEFAULT_QUEUE = "s"  # confirmed Open:Active on this cluster via `bqueues`, 2026
 
 
 def _read_run_info(root_path: str) -> dict[str, str]:
-    """The (key, value) pairs from a part file's own "RunInfo" tree, as a
+    """The (key, value) pairs from a part file's own "RunInfoTrajectories" tree, as a
     plain dict (see macros/run_info.hh) -- used to cross-check that a part
     file actually matches what *this* run expected of it (GitHub issue #9
     item 3), not just that some file happens to exist at that path."""
     with uproot.open(root_path) as f:
-        if "RunInfo" not in f:
+        if "RunInfoTrajectories" not in f:
             return {}
-        arr = f["RunInfo"].arrays(["key", "value"], library="np")
+        arr = f["RunInfoTrajectories"].arrays(["key", "value"], library="np")
     return dict(zip(arr["key"], arr["value"]))
 
 
@@ -335,7 +335,7 @@ def main() -> None:
 
     # Provenance (GitHub issue #9 item 4): which parts, from which run,
     # under which batch parameters, actually went into this merged file --
-    # appended as its own tree rather than folded into "RunInfo" so it
+    # appended as its own tree rather than folded into "RunInfoTrajectories" so it
     # doesn't collide with (or get overwritten by) the per-part RunInfo
     # trees export_avalanche_trajectories itself already writes there.
     with uproot.update(final_path) as f:

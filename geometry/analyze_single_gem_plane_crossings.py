@@ -30,7 +30,7 @@ import sys
 import numpy as np
 import uproot
 
-from analyze_plane_crossings import _crossed, _interpolated_xy_at_plane, _status_name
+from analyze_plane_crossings import _crossed, _interpolated_xy_at_plane, _status_name, require_trajectories_tree
 from gem_params import GEM_50UM, GEM_100UM
 
 # Single-GEM foil z-boundaries (see single_gem_field_model.py:
@@ -65,7 +65,7 @@ def _birth_region(z_val: float, z_gem_top: float, z_gem_bottom: float) -> str:
 
 def _load_geometry_from_run_info(root_path: str) -> tuple[float, float, float] | None:
     """(z_gem_top_cm, z_gem_bottom_cm, transfer_gap_cm), read from this
-    file's own "RunInfo" tree's "model_info_json" entry (see
+    file's own "RunInfoTrajectories" tree's "model_info_json" entry (see
     macros/run_info.hh, GitHub issue #6 items 1-2) instead of assuming a
     CLI-selected GEM_50UM/GEM_100UM catalog value and a hardcoded
     _TRANSFER_GAP_CM still match whatever this file was actually built
@@ -75,9 +75,9 @@ def _load_geometry_from_run_info(root_path: str) -> tuple[float, float, float] |
     falls back to the CLI/hardcoded path with its own warning.
     """
     with uproot.open(root_path) as f:
-        if "RunInfo" not in f:
+        if "RunInfoTrajectories" not in f:
             return None
-        arr = f["RunInfo"].arrays(["key", "value"], library="np")
+        arr = f["RunInfoTrajectories"].arrays(["key", "value"], library="np")
     model_info_json_values = [v for k, v in zip(arr["key"], arr["value"]) if k == "model_info_json"]
     if not model_info_json_values:
         return None
@@ -116,7 +116,7 @@ def main() -> None:
         planes.append((f"transfer {int(frac * 100)}%", z_gem_bottom - frac * transfer_gap_cm))
 
     with uproot.open(root_path) as f:
-        tree = f["Trajectories"]
+        tree = require_trajectories_tree(f, root_path, ["event", "track", "x", "y", "z"])
         has_status = "status" in tree.keys()
         branches = ["event", "track", "x", "y", "z"] + (["status"] if has_status else [])
         data = tree.arrays(branches, library="np")

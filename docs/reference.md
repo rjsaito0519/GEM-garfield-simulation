@@ -114,7 +114,7 @@ python3 batch/run_avalanche_batch.py \
   results/mesh/triple_gem_field_v1.15x_n7 resources/ar_ch4_90_10.gas \
   50 -0.2029 0.8405 0.4235 0.049 0.08487048957087498 0.1 0.0005 \
   --njobs 10 --queue s
-# -> results/root/triple_gem_field_v1.15x_n7_avalanche.root ("Trajectories" + "RunInfo" tree)
+# -> results/root/triple_gem_field_v1.15x_n7_avalanche.root ("Trajectories" + "RunInfoTrajectories" tree)
 
 # 4. genuine plane-crossing解析（GEM1-extracted cohortのfunnel、最終fate等）
 cd geometry
@@ -122,9 +122,9 @@ python3 analyze_plane_crossings.py \
   ../results/root/triple_gem_field_v1.15x_n7_avalanche.root
 ```
 
-この`_avalanche.root`は"RunInfo" treeを持つため、`analyze_plane_crossings.py`
-はn_cells等の幾何条件を自動で読み取る（末尾の明示的なn_cells引数は不要、
-GitHub issue #6 item 2）。
+この`_avalanche.root`は"RunInfoTrajectories" treeを持つため、
+`analyze_plane_crossings.py`はn_cells等の幾何条件を自動で読み取る
+（末尾の明示的なn_cells引数は不要、GitHub issue #6 item 2）。
 
 **注意（2026-09-24時点で未解決）: `EnableAvalancheSizeLimit(2000)`が
 Penning transfer有効化後は頻繁に到達する（このproduction条件で50
@@ -164,10 +164,13 @@ results/
 
 ## 4. ROOT出力のスキーマ
 
-`results/root/<baseName>_avalanche.root`は1ファイルに最大2つのTTreeを持つ。
-`gem_avalanche`と`export_avalanche_trajectories`はどちらも`TFile::Open(...,
-"UPDATE")`で開き、自分の書くtreeの古いcycleだけを`Delete("<TreeName>;*")`で
-消してから書き直すので、片方だけを再実行してももう片方のtreeは残る。
+`results/root/<baseName>_avalanche.root`は1ファイルに最大4つのTTreeを持つ
+（`Endpoints`, `Trajectories`, `RunInfoEndpoints`, `RunInfoTrajectories`
+-- batch mergeされたファイルはさらに`BatchMergeProvenance`も持つ、
+`batch/run_avalanche_batch.py`参照）。`gem_avalanche`と
+`export_avalanche_trajectories`はどちらも`TFile::Open(..., "UPDATE")`で
+開き、自分の書くtreeの古いcycleだけを`Delete("<TreeName>;*")`で消してから
+書き直すので、片方だけを再実行してももう片方が書いたtreeは残る。
 
 ### `Endpoints` (macros/gem_avalanche.cpp が書く)
 
@@ -206,7 +209,7 @@ with uproot.open("results/root/triple_gem_field_avalanche.root") as f:
 少数イベント推奨（`view_gem_avalanche_cross_section.cpp`と同じ理由:
 100イベント分の全経路を出すと可視化に使えないほど巨大になる）。
 
-### `RunInfo` (macros/gem_avalanche.cpp と export_avalanche_trajectories.cpp が書く)
+### `RunInfoEndpoints` / `RunInfoTrajectories` (gem_avalanche.cpp / export_avalanche_trajectories.cpp がそれぞれ書く)
 
 2026-09-24追加（GitHub issue #6 item 1）。そのrunで実際に使われた条件を、
 key/value文字列ペア1つにつき1エントリで記録する固定でないスキーマ
@@ -215,28 +218,31 @@ key/value文字列ペア1つにつき1エントリで記録する固定でない
 フィールドに分解せず`model_info_json`キーの下に元のJSON全体をそのまま
 埋め込んでいる。
 
+**2026-09-25、GitHub issue #11 item 1でtree名を分離**: 当初は両マクロとも
+同じ`RunInfo`という名前で書いていたため、同じ出力ファイルに両方を実行すると
+最後に実行した方の条件で上書きされてしまっていた（`Endpoints`/
+`Trajectories`自体は互いに影響しない）。`gem_avalanche`は
+`RunInfoEndpoints`、`export_avalanche_trajectories`は`RunInfoTrajectories`
+という別々の名前で書くように変更、双方が同じファイルに共存できる。
+
 | key | 意味 |
 |---|---|
 | `executable` | `"gem_avalanche"` / `"export_avalanche_trajectories"` |
-| `git_commit_hash` | ビルド時（`cmake`実行時点、ビルドの度ではない）のgit commit hash |
+| `git_commit_hash`, `git_dirty` | ビルド時（`cmake`実行時点、ビルドの度ではない）のgit commit hashと、その時点でtracked fileに未commit差分があったか |
 | `mesh_dir`, `geometry_type` | argv[1]そのもの、およびそのbaseName |
 | `gas_file`, `gas_temperature_k`, `gas_pressure_torr` | 使用した`.gas`ファイルと、`MediumMagboltz::LoadGasFile()`後に実際に読み込まれた温度・圧力 |
-| `gas_material_index` | `model_info.hh`の`geo.gas_material_index`（GitHub issue #6 item 3） |
+| `gas_material_index` | `model_info.hh`の`geo.gas_material_index`（GitHub issue #6 item 3、#10 item 1で`mesh.names`由来に修正） |
+| `penning_transfer_enabled`, `penning_r`, `penning_lambda_cm` | Penning transferの有効/無効と、有効な場合に実際に使われたr/λ（GitHub issue #11 item 3。Garfield++バージョンが変わると内蔵の自動計算値も変わりうるため、フラグだけでなく実値を記録） |
 | `n_events`, `z_sensor_min_cm`, `z_sensor_max_cm`, `z_injection_cm`, `x_half_cm`, `y_half_cm`, `e0_ev`, `injection_radius_cm` | CLI引数そのまま |
 | `avalanche_size_limit`, `n_events_at_avalanche_size_limit` | `EnableAvalancheSizeLimit()`の値と、そのrunで実際に上限に達したイベント数 |
 | `rng_seed` | 明示seedを渡した場合はその値、渡さなければ`"auto (process-default)"` |
-| `model_info_json` | `<baseName>_model_info.json`の生の中身（geometry・physical_group_ids・electrode_potentials_v・dielectric_relative_permittivity等すべて含む） |
-
-`gem_avalanche`/`export_avalanche_trajectories`はどちらも自分の`RunInfo`
-tree（既存cycleを`Delete("RunInfo;*")`で消してから書き直す）を持つため、
-同じ出力ファイルに両方を続けて実行すると、`RunInfo`は最後に実行した方の
-条件だけを反映する（`Endpoints`/`Trajectories`は互いに影響しない）。
+| `model_info_json` | `<baseName>_model_info.json`の生の中身（geometry・physical_group_ids・electrode_potentials_v・dielectric_relative_permittivity・garfield_material_indices等すべて含む） |
 
 Pythonから読む例:
 ```python
 import uproot
 with uproot.open("results/root/triple_gem_field_avalanche.root") as f:
-    arr = f["RunInfo"].arrays(["key", "value"], library="np")
+    arr = f["RunInfoTrajectories"].arrays(["key", "value"], library="np")
     run_info = dict(zip(arr["key"], arr["value"]))
     print(run_info["rng_seed"], run_info["git_commit_hash"])
 ```

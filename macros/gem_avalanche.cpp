@@ -12,9 +12,12 @@
  * "Endpoints" cycles purged first, so re-running this macro replaces its
  * own tree without disturbing a sibling "Trajectories" tree that
  * export_avalanche_trajectories.cpp may have written to the same file.
- * Also writes a "RunInfo" TTree recording the run's actual conditions
- * (gas file, geometry, RNG seed, git commit, full model_info.json, ...) --
- * see run_info.hh and GitHub issue #6 item 1.
+ * Also writes a "RunInfoEndpoints" TTree recording the run's actual
+ * conditions (gas file, geometry, RNG seed, git commit, full
+ * model_info.json, ...) -- see run_info.hh and GitHub issue #6 item 1 /
+ * #11 item 1 (this macro's own tree name, distinct from
+ * export_avalanche_trajectories.cpp's "RunInfoTrajectories", so the two
+ * don't overwrite each other when run against the same output file).
  *
  * The mesh/result base name is taken from the last path component of the
  * mesh directory (e.g. "single_gem_field" or "triple_gem_field"), matching
@@ -181,6 +184,21 @@ int main(int argc, char* argv[]) {
     std::cerr << "WARNING: EnablePenningTransfer() failed for this gas "
                  "composition -- proceeding without Penning transfer.\n";
   }
+  // The actual r/lambda values used, not just the enabled/disabled flag --
+  // GitHub issue #11 item 3: these came from Garfield++'s own built-in
+  // parameterization (EnablePenningTransfer()'s no-arg overload), which
+  // could in principle change with a future Garfield++ version even though
+  // our gas composition doesn't, so recording the value actually used each
+  // run (not just "Penning was on") matters for reproducibility.
+  double penningR = 0., penningLambda = 0.;
+  if (penningEnabled) {
+    // MediumMagboltz declares its own GetPenningTransfer(size_t, ...)
+    // (per-excitation-level) that hides MediumGas's GetPenningTransfer(
+    // const std::string&, ...) (the global per-gas-component value
+    // EnablePenningTransfer() actually set) -- explicit base-class
+    // qualification needed to reach the one we want.
+    gas.MediumGas::GetPenningTransfer("Ar", penningR, penningLambda);
+  }
 
   // geo.gas_material_index is read from the actual "Gas" physical group ID
   // the geometry builder wrote (model_info.hh), not hardcoded -- see that
@@ -307,7 +325,7 @@ int main(int argc, char* argv[]) {
 
   // Record the conditions this run actually used, alongside the data --
   // see run_info.hh and GitHub issue #6 item 1.
-  gem::WriteRunInfo(rootFile, {
+  gem::WriteRunInfo(rootFile, "RunInfoEndpoints", {
       {"executable", "gem_avalanche"},
       {"git_commit_hash", GEM_GIT_COMMIT_HASH},
       {"mesh_dir", meshDirArg},
@@ -317,6 +335,9 @@ int main(int argc, char* argv[]) {
       {"gas_pressure_torr", std::to_string(gas.GetPressure())},
       {"gas_material_index", std::to_string(geo.gas_material_index)},
       {"penning_transfer_enabled", penningEnabled ? "true" : "false"},
+      {"penning_r", std::to_string(penningR)},
+      {"penning_lambda_cm", std::to_string(penningLambda)},
+      {"git_dirty", GEM_GIT_DIRTY},
       {"n_events", std::to_string(nEvents)},
       {"z_sensor_min_cm", std::to_string(zSensorMin)},
       {"z_sensor_max_cm", std::to_string(zSensorMax)},

@@ -42,13 +42,13 @@
  *     item 4).
  *
  * Output: "<baseName>_avalanche.root", tree "Trajectories", branches
- *   event,track,x,y,z,t,energy,status. Also writes a "RunInfo" tree (see
- *   run_info.hh, GitHub issue #6 item 1) recording this run's own
- *   conditions -- note that gem_avalanche.cpp writes its own "RunInfo" to
- *   the same file, so if both macros are run against the same mesh/output
- *   dir, "RunInfo" ends up describing whichever one ran most recently, not
- *   both; "Endpoints"/"Trajectories" are unaffected since each macro only
- *   purges its own tree name.
+ *   event,track,x,y,z,t,energy,status. Also writes a "RunInfoTrajectories"
+ *   tree (see run_info.hh, GitHub issue #6 item 1 / #11 item 1) recording
+ *   this run's own conditions -- gem_avalanche.cpp writes its own
+ *   "RunInfoEndpoints" to the same file under a different tree name
+ *   specifically so the two don't overwrite each other (last-writer-wins
+ *   was the original, now-fixed behavior when both used one shared
+ *   "RunInfo" name).
  * (one entry per recorded path point; "track" is a per-event index into
  * AvalancheMicroscopic::GetElectrons(), not a globally unique ID -- pair
  * (event,track) to identify one electron's full path). "status" is that
@@ -157,6 +157,15 @@ int main(int argc, char* argv[]) {
     std::cerr << "WARNING: EnablePenningTransfer() failed for this gas "
                  "composition -- proceeding without Penning transfer.\n";
   }
+  // See gem_avalanche.cpp's comment on the same pair of calls (GitHub
+  // issue #11 item 3) for why the actual r/lambda are recorded, not just
+  // whether Penning was enabled.
+  double penningR = 0., penningLambda = 0.;
+  if (penningEnabled) {
+    // See gem_avalanche.cpp's comment on the same call for why the
+    // explicit MediumGas:: qualification is needed.
+    gas.MediumGas::GetPenningTransfer("Ar", penningR, penningLambda);
+  }
 
   // geo.gas_material_index is read from the actual "Gas" physical group ID
   // the geometry builder wrote (model_info.hh), not hardcoded -- see that
@@ -246,7 +255,7 @@ int main(int argc, char* argv[]) {
 
   // Record the conditions this run actually used, alongside the data --
   // see run_info.hh and GitHub issue #6 item 1.
-  gem::WriteRunInfo(rootFile, {
+  gem::WriteRunInfo(rootFile, "RunInfoTrajectories", {
       {"executable", "export_avalanche_trajectories"},
       {"git_commit_hash", GEM_GIT_COMMIT_HASH},
       {"mesh_dir", argv[1]},
@@ -256,6 +265,9 @@ int main(int argc, char* argv[]) {
       {"gas_pressure_torr", std::to_string(gas.GetPressure())},
       {"gas_material_index", std::to_string(geo.gas_material_index)},
       {"penning_transfer_enabled", penningEnabled ? "true" : "false"},
+      {"penning_r", std::to_string(penningR)},
+      {"penning_lambda_cm", std::to_string(penningLambda)},
+      {"git_dirty", GEM_GIT_DIRTY},
       {"n_events", std::to_string(nEvents)},
       {"event_offset", std::to_string(eventOffset)},
       {"collision_steps", std::to_string(collisionSteps)},
