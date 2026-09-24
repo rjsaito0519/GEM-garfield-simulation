@@ -43,8 +43,21 @@ struct ModelGeometryInfo {
   // SetMedium(0, ...)/DriftMedium(0) call silently wrong (gotcha #8 again:
   // this specific mistake doesn't crash, only the drift-medium status
   // determination quietly breaks while raw field values stay correct).
-  // Read from the actual physical_group_ids the geometry builder wrote
-  // instead of assuming it.
+  //
+  // Read from model_info.json's "garfield_material_indices" block, written
+  // by elmer/write_sif.py *after* ElmerGrid has run, from mesh.names'
+  // actual (post-renumbering) body IDs -- NOT derived here from
+  // "physical_group_ids" (the pre-ElmerGrid Gmsh tags model_info.json also
+  // carries). GitHub issue #6 item 3's original fix used those Gmsh tags
+  // directly, which happened to agree with mesh.names in every case seen
+  // so far but is not guaranteed to (ElmerGrid is documented, in
+  // write_sif.py's own module docstring, to renumber boundary physical
+  // groups into a compact range -- the same could happen to body groups);
+  // this was flagged as a live version of the same class of bug in GitHub
+  // issue #10 item 1. mesh.names, not the Gmsh-side tags, is this
+  // project's one authoritative source for post-ElmerGrid IDs everywhere
+  // else (write_sif.py's own Target Body/Boundary indices), so this field
+  // now follows that same rule.
   int gas_material_index;
 };
 
@@ -69,7 +82,15 @@ inline ModelGeometryInfo LoadModelGeometryInfo(const std::string& meshDirArg,
   nlohmann::json j;
   in >> j;
   const auto& g = j.at("geometry");
-  const int gasMaterialIndex = j.at("physical_group_ids").at("Gas").get<int>() - 1;
+  if (!j.contains("garfield_material_indices")) {
+    throw std::runtime_error(
+        "model_info.json at " + path.string() +
+        " has no \"garfield_material_indices\" block -- it predates GitHub issue #10 item 1, "
+        "or elmer/write_sif.py has not been (re-)run against this mesh since. Re-run "
+        "write_sif.py (or the full geometry->Elmer pipeline) for this mesh; the gas material "
+        "index is no longer derived from the pre-ElmerGrid Gmsh physical_group_ids here.");
+  }
+  const int gasMaterialIndex = j.at("garfield_material_indices").at("Gas").get<int>();
   return ModelGeometryInfo{
       g.at("pitch_cm").get<double>(),
       g.at("half_extent_x_cm").get<double>(),

@@ -234,6 +234,21 @@ def build_sif_text(
     return "\n".join(blocks)
 
 
+def resolve_missing_electrodes(
+    electrode_potentials_v: dict[str, float], boundary_ids: dict[str, int]
+) -> set[str]:
+    """Electrode names present in model_info.json's electrode_potentials_v
+    but absent from mesh.names' boundary section -- build_sif_text() would
+    otherwise just silently drop them from the .sif's Boundary Condition
+    list (via its `name in electrode_potentials_v` filter), leaving Elmer
+    to solve with a missing boundary condition on that surface with no
+    error at all. GitHub issue #10 item 2: this must be a hard failure,
+    not a silent omission -- a missing electrode BC can produce a
+    plausible-looking but physically wrong field map.
+    """
+    return set(electrode_potentials_v) - set(boundary_ids)
+
+
 def main() -> None:
     if len(sys.argv) < 2:
         print("Usage: python3 write_sif.py <mesh_name> [preconditioner] [max_iterations]\n"
@@ -258,6 +273,16 @@ def main() -> None:
     mesh_names_path = os.path.join(MESH_DIR, mesh_name, "mesh.names")
     body_ids, boundary_ids = parse_mesh_names(mesh_names_path)
 
+    missing_electrodes = resolve_missing_electrodes(model_info["electrode_potentials_v"], boundary_ids)
+    if missing_electrodes:
+        raise ValueError(
+            f"electrode(s) {sorted(missing_electrodes)} are in model_info.json's "
+            f"electrode_potentials_v but not in mesh.names' boundaries {sorted(boundary_ids)} -- "
+            "refusing to silently solve with a missing boundary condition. Either the mesh/"
+            "geometry generation dropped this boundary, or model_info.json is stale relative "
+            "to the mesh that was actually built -- see GitHub issue #10 item 2."
+        )
+
     dielectrics_path = os.path.join(MESH_DIR, mesh_name, "dielectrics.dat")
     body_permittivities = resolve_body_permittivities(body_ids, model_info)
     write_dielectrics_dat(body_ids, body_permittivities, dielectrics_path)
@@ -271,6 +296,22 @@ def main() -> None:
     with open(output_path, "w") as f:
         f.write(sif_text)
     print(f"Wrote {output_path}. Body IDs: {body_ids}, boundary IDs: {boundary_ids}")
+
+    # The authoritative post-ElmerGrid-renumbering body -> Garfield material
+    # index mapping (body_id - 1, see write_dielectrics_dat's docstring for
+    # the convention), written back into model_info.json so C++ code reads
+    # *this* instead of re-deriving its own guess from the Gmsh-side
+    # physical_group_ids block -- those are the pre-renumbering Gmsh tags,
+    # not guaranteed to match mesh.names' actual post-ElmerGrid IDs (they
+    # have simply happened to agree so far). See GitHub issue #10 item 1;
+    # this directly mirrors the pattern write_sif.py itself already follows
+    # for boundary Target IDs (mesh.names as the single authoritative
+    # source, not the Gmsh tags model_info.json's physical_group_ids holds).
+    model_info["garfield_material_indices"] = {name: bid - 1 for name, bid in body_ids.items()}
+    with open(model_info_path, "w") as f:
+        json.dump(model_info, f, indent=2)
+    print(f"Updated {model_info_path} with garfield_material_indices: "
+          f"{model_info['garfield_material_indices']}")
 
 
 if __name__ == "__main__":
