@@ -159,10 +159,20 @@ def render(out_path: str, x, y, z, t, alive_times, alive_cum,
     GX, GY = np.meshgrid(gx, gy)
 
     t_max = t.max()
-    # Dense frames near t=0 (entry into GEM1 + initial multiplication happen
-    # fast and are the most information-dense part), coarser later.
+    # Dense frames near BOTH ends of the timeline, coarser in the middle:
+    # t=0 (entry into GEM1 + initial multiplication happen fast) needs dense
+    # sampling, and so does the tail end (what happens after the cloud
+    # clears GEM3, into the induction gap -- reported 2026-09-25 as feeling
+    # rushed/cut short with the old dense-near-zero-only skew). The typical
+    # per-event time profile is a multiplication burst, a quiet decay
+    # stretch, then another burst near the next GEM -- the quiet stretches
+    # are the least visually interesting part, so that's where frames can
+    # be sparse. A smoothstep g(frac) = 3*frac^2 - 2*frac^3 has g'(0)=g'(1)=0
+    # (time barely advances per frame near either end -- i.e. dense sampling
+    # there) and its steepest slope at frac=0.5 (time advances fastest
+    # there -- sparse sampling in the middle), giving exactly that shape.
     frac = np.linspace(0, 1, n_frames)
-    frame_times = t_max * frac**1.6
+    frame_times = t_max * (3.0 * frac**2 - 2.0 * frac**3)
 
     fig = plt.figure(figsize=(13.0, 7.6))
     fig.patch.set_facecolor("black")
