@@ -289,6 +289,7 @@ def main() -> None:
 
     cache = bsub_utils.BJobStatusCache()
     job_ids = [j["job_id"] for j in jobs]
+    log_paths = {j["job_id"]: j["log_path"] for j in jobs}
 
     def _report(statuses: dict[int, str]) -> None:
         counts: dict[str, int] = {}
@@ -298,7 +299,9 @@ def main() -> None:
         print(f"[{time.strftime('%H:%M:%S')}] {summary}")
 
     print(f"\nPolling every {args.poll_interval}s until all jobs finish ...")
-    final_statuses = cache.wait_all(job_ids, poll_interval_s=args.poll_interval, on_update=_report)
+    final_statuses = cache.wait_all(
+        job_ids, poll_interval_s=args.poll_interval, on_update=_report, log_paths=log_paths
+    )
 
     # Strict DONE-only merge condition (GitHub issue #9 item 2): a job
     # that's EXIT, or UNKNOWN (aged out of `bjobs -a` before we could

@@ -32,6 +32,37 @@ _BSUB_JOB_ID_RE = re.compile(r"Job <(\d+)> is submitted")
 # change again (successfully finished or failed/killed).
 _TERMINAL_STATES = {"DONE", "EXIT"}
 
+# LSF writes this header line to a job's -o log as soon as the job reaches
+# a terminal state, e.g. "Subject: Job 123: <name> in cluster <x> Done".
+_LSF_LOG_STATUS_RE = re.compile(r"in cluster <[^>]*> (Done|Exit)")
+
+
+def _status_from_log(log_path: str) -> str | None:
+    """Final status ("DONE"/"EXIT") read from a job's own LSF -o log
+    header, or None if the header isn't there yet (job not actually
+    finished) or the log doesn't exist. Unlike `bjobs -a`, a local log file
+    never ages out -- this is the fallback for BJobStatusCache.get_status
+    when a job has disappeared from `bjobs -a`'s retained history (real,
+    observed 2026-09-25: a 50-job batch against the 9x9 mesh had 22/50
+    jobs finish successfully -- confirmed by this exact log header -- but
+    fall out of `bjobs -a` before wait_all's polling loop noticed, because
+    the loop keeps running for as long as the *slowest* job in the batch
+    takes, well past bjobs -a's retention window for the fast ones. Before
+    this fix, those 22 genuinely-successful jobs were reported "UNKNOWN"
+    and the batch's strict DONE-only merge gate (GitHub issue #9 item 2)
+    correctly refused to merge -- correctly conservative, but needlessly
+    so, since the data was fine).
+    """
+    try:
+        with open(log_path) as f:
+            head = f.read(2000)
+    except OSError:
+        return None
+    match = _LSF_LOG_STATUS_RE.search(head)
+    if match is None:
+        return None
+    return "DONE" if match.group(1) == "Done" else "EXIT"
+
 
 def build_login_shell_command(shell_command: str) -> list[str]:
     """Wrap a shell command string to run inside a fresh login shell
@@ -120,29 +151,47 @@ class BJobStatusCache:
                 continue  # header line or malformed
             self._status[int(columns[0])] = columns[2]
 
-    def get_status(self, job_id: int) -> str:
-        """Status string (PEND/RUN/DONE/EXIT/...), or 'UNKNOWN' if bjobs -a
-        no longer reports this job at all (e.g. it aged out of LSF's
-        recently-finished-job history) -- callers should treat 'UNKNOWN'
-        for a job they know they submitted as "probably finished", not as
-        "still pending".
+    def get_status(self, job_id: int, log_path: str | None = None) -> str:
+        """Status string (PEND/RUN/DONE/EXIT/...). If bjobs -a no longer
+        reports this job at all (aged out of LSF's recently-finished-job
+        history) and log_path is given, falls back to that job's own LSF
+        log header (see _status_from_log) to resolve it to DONE/EXIT
+        instead of leaving it as an ambiguous 'UNKNOWN' -- see
+        _status_from_log's docstring for why this fallback exists. Only
+        genuinely still-running-or-truly-untraceable jobs (no log header
+        yet, or no log_path given) come back as 'UNKNOWN'.
         """
-        return self._status.get(job_id, "UNKNOWN")
+        status = self._status.get(job_id)
+        if status is not None:
+            return status
+        if log_path is not None:
+            log_status = _status_from_log(log_path)
+            if log_status is not None:
+                return log_status
+        return "UNKNOWN"
 
     def wait_all(
         self,
         job_ids: list[int],
         poll_interval_s: float = 15.0,
         on_update=None,
+        log_paths: dict[int, str] | None = None,
     ) -> dict[int, str]:
         """Block until every job in job_ids is DONE, EXIT, or UNKNOWN
-        (aged out of bjobs -a's history -- treated as finished). Returns
-        the final {job_id: status} dict. Calls on_update(status_dict) once
-        per poll cycle, if given, for progress reporting.
+        (aged out of bjobs -a's history AND its own log has no terminal
+        header yet -- treated as finished, since there is nothing left to
+        poll for). Returns the final {job_id: status} dict. Calls
+        on_update(status_dict) once per poll cycle, if given, for progress
+        reporting. log_paths, if given, maps job_id -> its LSF -o log path,
+        used to resolve jobs that have aged out of bjobs -a (see
+        get_status) instead of leaving them as an ambiguous 'UNKNOWN'.
         """
         while True:
             self.refresh()
-            statuses = {jid: self.get_status(jid) for jid in job_ids}
+            statuses = {
+                jid: self.get_status(jid, log_paths.get(jid) if log_paths else None)
+                for jid in job_ids
+            }
             if on_update is not None:
                 on_update(statuses)
             if all(s in _TERMINAL_STATES or s == "UNKNOWN" for s in statuses.values()):
