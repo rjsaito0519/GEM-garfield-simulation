@@ -46,11 +46,24 @@ def build_login_shell_command(shell_command: str) -> list[str]:
     return ["bash", "-lc", shell_command]
 
 
-def submit(shell_command: str, queue: str, log_path: str, job_name: str | None = None) -> int:
+def submit(
+    shell_command: str, queue: str, log_path: str, job_name: str | None = None,
+    mem_mb: int | None = None,
+) -> int:
     """Submit shell_command (a full shell command string, e.g.
     "cd .../macros/build && ./export_avalanche_trajectories ...") via
     `bsub -q <queue> -o <log_path>`, running it inside a login shell (see
     build_login_shell_command). Returns the parsed LSF job id.
+
+    mem_mb: explicit memory request in MB, passed as both `-M` (hard limit)
+    and `-R "rusage[mem=...]"` (scheduler reservation). Without this, the
+    queue's own default limit applies -- confirmed 2026-09-24 to be 4000MB
+    for queue "s" on this cluster (not something this script ever set), which
+    is nowhere near enough for a large/finely-tiled mesh: a
+    triple_gem_field_v1.15x_n9 (9.6M-node) avalanche job was killed
+    (TERM_MEMLIMIT, exit 137) hitting exactly that 4096MB ceiling. Pass a
+    generous mem_mb for any mesh past roughly n_cells=7 (see
+    docs/debugging_notes.md).
 
     Raises RuntimeError if bsub's stdout doesn't match the expected
     "Job <NNN> is submitted to queue <...>" response.
@@ -58,6 +71,8 @@ def submit(shell_command: str, queue: str, log_path: str, job_name: str | None =
     cmd = ["bsub", "-q", queue, "-o", log_path]
     if job_name:
         cmd += ["-J", job_name]
+    if mem_mb is not None:
+        cmd += ["-M", str(mem_mb), "-R", f"rusage[mem={mem_mb}]"]
     cmd += build_login_shell_command(shell_command)
     proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if proc.returncode != 0:

@@ -98,6 +98,15 @@ def main() -> None:
              "4); raise this for a run where that bias matters.",
     )
     parser.add_argument(
+        "--mem-mb", type=int, default=None,
+        help="Explicit bsub memory request in MB (both -M and -R rusage[mem=...]). "
+             "Without this, queue s's own default (4000MB, confirmed 2026-09-24) "
+             "applies, which is nowhere near enough for a large/finely-tiled mesh -- "
+             "a triple_gem_field_v1.15x_n9 (9.6M-node) job was TERM_MEMLIMIT-killed "
+             "at exactly that ceiling. Pass a generous value (e.g. 16000) for any "
+             "mesh past roughly n_cells=7.",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true",
         help="Print what would be submitted/merged; never call bsub or touch the LSF queue.",
     )
@@ -157,8 +166,9 @@ def main() -> None:
 
     if args.dry_run:
         print("\n--dry-run: not calling bsub. Commands that would be submitted:")
+        mem_flags = f"-M {args.mem_mb} -R rusage[mem={args.mem_mb}] " if args.mem_mb else ""
         for j in jobs:
-            print(f"  bsub -q {args.queue} -o {j['log_path']} bash -lc \"{j['command']}\"")
+            print(f"  bsub -q {args.queue} {mem_flags}-o {j['log_path']} bash -lc \"{j['command']}\"")
         print("\n--dry-run: stopping before submission/merge.")
         return
 
@@ -167,6 +177,7 @@ def main() -> None:
         j["job_id"] = bsub_utils.submit(
             j["command"], queue=args.queue, log_path=j["log_path"],
             job_name=f"{base_name}_avalanche_part{j['index']:03d}",
+            mem_mb=args.mem_mb,
         )
         print(f"  job {j['index']:3d}: submitted as LSF job {j['job_id']}")
 
