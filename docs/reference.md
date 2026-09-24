@@ -126,13 +126,42 @@ python3 analyze_plane_crossings.py \
 `analyze_plane_crossings.py`はn_cells等の幾何条件を自動で読み取る
 （末尾の明示的なn_cells引数は不要、GitHub issue #6 item 2）。
 
-**注意（2026-09-24時点で未解決）: `EnableAvalancheSizeLimit(2000)`が
-Penning transfer有効化後は頻繁に到達する（このproduction条件で50
-イベント中28イベントが到達）。** 上限到達イベントは、その時点で未処理
-だった電子のトラックがGarfield++の実装上記録されないまま切り捨てられる
-ため、`analyze_plane_crossings.py`の透過率等の絶対値は過小評価方向の
-バイアスを持ちうる。上限を上げるかはユーザー判断待ち（README.md
-「現在のproduction condition」参照）。
+**2026-09-25時点で解消: production limitは`avalanche_size_limit=20000`
+を使用する。** `EnableAvalancheSizeLimit(2000)`がPenning transfer有効化後
+は頻繁に到達していた問題（このproduction条件で50イベント中28イベントが
+到達）を受け、GitHub issue #12 item 1として`triple_gem_field_v1.15x_n5`上
+で2000/5000/10000/20000の小統計(各10-20イベント)sweepを実施:
+
+| avalanche_size_limit | limit到達割合 | avalanche size (mean/median/max) |
+|---|---|---|
+| 2000  | 2/20 (10.0%) | 773.5 / 362.5 / 2005 |
+| 5000  | 0/20 (0.0%)  | 1120.5 / 947.5 / 3635 |
+| 10000 | 0/20 (0.0%)  | 716.1 / 423.0 / 3037 |
+| 20000 | 0/20 (0.0%)  | 553.5 / 288.5 / 2318 |
+
+limit到達割合は5000以上で0%に落ち、GEM1-extracted cohortの各funnel段
+(GEM1 extraction, GEM2 hole entrance, GEM2 bottom, 等 -- `analyze_plane_crossings.py`
+出力)の比率もlimit値に対して系統的な傾向は見られず、10-20イベントの統計
+誤差内で一致した（詳細はissue #12のコメント参照）。よって
+`avalanche_size_limit=20000`（9x9のfinite geometry convergence run
+[issue #12 item 3]で既に使用中）を今後の production limitとして採用する。
+**ただし各点10-20イベントと統計が小さく、厳密な収束証明ではなく「傾向として
+問題なし」という判断である点に注意。**
+
+**注意: 上の§2.5にある現行の`triple_gem_field_v1.15x_n7_avalanche.root`
+自体は、この収束確認および`avalanche_size_limit`のCLI引数化(issue #9 item 4)
+より前に生成されたファイルで、デフォルトの`avalanche_size_limit=2000`
+のまま（50イベント中28イベントが上限到達、README.md「現在のproduction
+condition」参照）。上の結論を反映するには`--avalanche-size-limit 20000`
+を付けてn7を再生成する必要があるが、それには新規bsub投入の承認が要るため
+未実施 -- ユーザー判断待ち。
+
+同issue item 2として`collisionSteps`(trajectory export時のcollision point
+間引き)の1/5/20 sweepも実施し、GEM1 extraction等の比率・avalanche size
+limit到達割合ともにcollisionSteps値に対する系統的な傾向は見られなかった
+（同じく10-20イベントの統計内）。よって production では軽い設定
+（`collisionSteps`のデフォルト値、現状のproduction再現手順が使う値）を
+そのまま使用してよいと判断する。
 
 ## 3. 出力ディレクトリ構成 (`results/`)
 
