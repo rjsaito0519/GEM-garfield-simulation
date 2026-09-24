@@ -1280,6 +1280,38 @@ embedded文脈でのtransfer/次GEM進入率（`analyze_plane_crossings.py`の
 既存機能で測定可能）との組み合わせによる完全なcharge-flow tableの
 構築は、issue #7 item 5の残作業として進行中。
 
+## 2026-09-24: production条件(`triple_gem_field_v1.15x_n5`)をPenning transfer有効・injection修正済みで再計算
+
+Penning transfer有効化・injection一様面積サンプリング修正（本ページ上の
+「Penning transferを有効化」節）を受け、production条件の電子雪崩を
+同じ50イベント・5x5タイルで再計算した（narrow injection、5µm半径 --
+production自体はcollection efficiency測定用の広いinjectionではなく
+従来通りの軸近傍注入のまま）。`analyze_plane_crossings.py`が今回
+初めて実際のファイルに対して"RunInfo"から幾何条件を自動読込した
+（`Geometry config: read from this file's own RunInfo tree`と表示、
+GitHub issue #6 item 2の実地確認）。
+
+結果（Penning有効・修正後、50イベント）:
+
+- 30,523 avalanche electrons（Penning無し版の10,910から約2.8倍に増加）
+- GEM1-extracted cohort: 9054/30523 (29.7%)
+- GEM2ホール進入: 213/9054 (2.4% of cohort)、GEM2 bottom: 43件(0.5%)、
+  GEM3 top: 1件(0.0%)、GEM3 bottom: 0件
+- 新たに目立つ損失チャネル: 最終fateの34.2%が"StatusLeftDriftArea
+  (lateral sensor boundary) in transfer gap 1"（タイル境界からの
+  ラテラル脱出。電子数が全体的に増えたことで、既知のタイル境界
+  アーティファクトが従来よりはっきり見えるようになったと考えられる。
+  5x5では境界損失をゼロにできていない/issue #7 item 1のタイル収束性
+  確認と直結する）
+
+**注意: README.md「現在のproduction condition」に記載の局所ゲイン数値
+（GEM1=90.6x/GEM2=11.5x/GEM3=11.7x）はこのPenning有効化より前に
+`gem_avalanche`（`export_avalanche_trajectories`とは別マクロ）で
+計算されたもので、まだ更新していない。** `gem_avalanche`も同じ
+`EnablePenningTransfer()`変更を受けているため、同条件で再実行すれば
+おそらく上昇するはずだが（今回のTrajectories解析でも電子数が
+約2.8倍に増えている）、未確認。次のステップとして記録。
+
 ## パイプライン構築時に踏んだ落とし穴（Gmsh → Elmer → Garfield++）
 
 こちらは物理の問題ではなく、素朴にハマったバグ・仕様。同種の変更をする際は再確認。
