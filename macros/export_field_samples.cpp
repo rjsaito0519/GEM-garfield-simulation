@@ -118,13 +118,14 @@ int main(int argc, char* argv[]) {
   ComponentElmer elm(meshDir + "mesh.header", meshDir + "mesh.elements",
                       meshDir + "mesh.nodes", meshDir + "dielectrics.dat",
                       meshDir + baseName + ".result", "cm");
-  // Index 0, not body ID 1: see view_gem_field.cpp's comment on the same
-  // call for why (ComponentElmer subtracts 1 from every body ID before
-  // using it as an array index).
-  elm.SetMedium(0, &gas);
-  // SetMedium() alone does not flag material 0 as a drift medium, which
+  // geo.gas_material_index is read from the actual "Gas" physical group ID
+  // the geometry builder wrote (model_info.hh), not hardcoded -- see that
+  // struct's own comment and docs/pipeline_gotchas.md #8 (ComponentElmer
+  // subtracts 1 from mesh.names' 1-based body ID) and GitHub issue #6 item 3.
+  elm.SetMedium(geo.gas_material_index, &gas);
+  // SetMedium() alone does not flag this material as a drift medium, which
   // would leave every sample's "status" at -5.
-  elm.DriftMedium(0);
+  elm.DriftMedium(geo.gas_material_index);
 
   // Vector-arrow grids: kept coarse since each point becomes a visible arrow.
   {

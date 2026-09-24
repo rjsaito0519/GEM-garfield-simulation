@@ -33,6 +33,18 @@ struct ModelGeometryInfo {
   double half_extent_y_cm;
   double z_domain_min_cm;
   double z_domain_max_cm;
+  // ComponentElmer material index for the "Gas" physical group (see
+  // docs/pipeline_gotchas.md #8: ComponentElmer subtracts 1 from
+  // mesh.names' 1-based body ID). Every macro used to hardcode this as the
+  // literal 0, relying on "Gas" always being the first addPhysicalGroup()
+  // call in geometry/*_field_model.py -- a real but silent fragility (see
+  // GitHub issue #6 item 3): reordering those calls would make every
+  // SetMedium(0, ...)/DriftMedium(0) call silently wrong (gotcha #8 again:
+  // this specific mistake doesn't crash, only the drift-medium status
+  // determination quietly breaks while raw field values stay correct).
+  // Read from the actual physical_group_ids the geometry builder wrote
+  // instead of assuming it.
+  int gas_material_index;
 };
 
 // meshDirArg is the raw mesh/result directory path as passed on the command
@@ -52,12 +64,14 @@ inline ModelGeometryInfo LoadModelGeometryInfo(const std::string& meshDirArg,
   nlohmann::json j;
   in >> j;
   const auto& g = j.at("geometry");
+  const int gasMaterialIndex = j.at("physical_group_ids").at("Gas").get<int>() - 1;
   return ModelGeometryInfo{
       g.at("pitch_cm").get<double>(),
       g.at("half_extent_x_cm").get<double>(),
       g.at("half_extent_y_cm").get<double>(),
       g.at("z_domain_min_cm").get<double>(),
       g.at("z_domain_max_cm").get<double>(),
+      gasMaterialIndex,
   };
 }
 

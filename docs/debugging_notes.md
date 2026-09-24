@@ -1175,6 +1175,21 @@ Cu層(4µm)がプロット全体のz方向スケール(~0.6cm)に対して視認
   1イベントの雪崩が病的に大きく/詰まって成長し続けていた）。`EnableAvalancheSizeLimit
   (2000)`で単一イベントの暴走が全体を止めないようにした。`GetAvalancheSize()`は上限で
   打ち切られたサイズをそのまま返す。
+- **2026-09-24: `export_avalanche_trajectories`が実行開始直後（イベント0の途中、
+  `Event 0/N`のprintより前）に`free(): invalid pointer`/`munmap_chunk(): invalid
+  pointer`で確実に落ちる状態を確認した。** issue #6 item 3（gas material index
+  一元化）の動作確認中に発見。`git stash`で該当ファイルを未編集の状態に戻して
+  再ビルド・再実行しても同じ箇所で同じ落ち方をすることを確認済みなので、今回の
+  変更（`macros/model_info.hh`経由の`gas_material_index`化）が原因ではない、
+  pre-existingな問題。`single_gem_field`・`triple_gem_field`どちらのmeshでも再現。
+  一方で`gem_avalanche.cpp`・`view_gem_avalanche_cross_section.cpp`は同じ
+  `AvalancheMicroscopic`を使っていながら正常にイベントループを完走し、
+  出力を書き終えた後（プロセス終了時）にだけ`double free or corruption (!prev)`
+  で落ちる — こちらは既知のbenignなROOT終了時クラッシュ（本ファイル冒頭で言及、
+  `docs/pipeline_gotchas.md`項目13）と一致するパターン。`export_avalanche_trajectories`
+  だけが出力を書く前に落ちる点が異なり、未調査・未解決。次にこのマクロを使う前に
+  原因を切り分けること（`EnableDriftLines()`関連のパス記録、`TTree::Branch`の
+  `std::size_t`バインディング、または別の環境要因の可能性がある）。
 
 ## 関連ファイル
 

@@ -63,6 +63,8 @@
 #include "Garfield/Sensor.hh"
 #include "Garfield/ViewDrift.hh"
 
+#include "model_info.hh"
+
 using namespace Garfield;
 
 int main(int argc, char* argv[]) {
@@ -74,6 +76,7 @@ int main(int argc, char* argv[]) {
   }
   const std::string meshDir = std::string(argv[1]) + "/";
   const std::string baseName = std::filesystem::path(argv[1]).filename().string();
+  const gem::ModelGeometryInfo geo = gem::LoadModelGeometryInfo(argv[1], baseName);
   const std::string gasFile = argv[2];
   const int nEvents = std::atoi(argv[3]);
   const double zSensorMin = std::stod(argv[4]);
@@ -131,13 +134,15 @@ int main(int argc, char* argv[]) {
     gas.SetMaxElectronEnergy(maxElectronEnergyEv);
   }
 
-  // Material index 0 = Gas -- see gmsh_elmer_garfield_pipeline_gotchas
-  // memory note / view_gem_field.cpp's comment on the same call for why.
+  // geo.gas_material_index is read from the actual "Gas" physical group ID
+  // the geometry builder wrote (model_info.hh), not hardcoded -- see that
+  // struct's own comment and docs/pipeline_gotchas.md #8 (ComponentElmer
+  // subtracts 1 from mesh.names' 1-based body ID) and GitHub issue #6 item 3.
   ComponentElmer elm(meshDir + "mesh.header", meshDir + "mesh.elements",
                       meshDir + "mesh.nodes", meshDir + "dielectrics.dat",
                       meshDir + baseName + ".result", "cm");
-  elm.SetMedium(0, &gas);
-  elm.DriftMedium(0);
+  elm.SetMedium(geo.gas_material_index, &gas);
+  elm.DriftMedium(geo.gas_material_index);
 
   Sensor sensor;
   sensor.AddComponent(&elm);

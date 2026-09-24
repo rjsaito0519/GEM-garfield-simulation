@@ -61,13 +61,12 @@ int main(int argc, char* argv[]) {
   ComponentElmer elm(meshDir + "mesh.header", meshDir + "mesh.elements",
                       meshDir + "mesh.nodes", meshDir + "dielectrics.dat",
                       meshDir + baseName + ".result", "cm");
-  // Body ID 1 = "Gas" in mesh.names, but ComponentElmer subtracts 1 from
-  // every body ID it reads from mesh.elements before using it as an array
-  // index (confirmed in ComponentElmer.cc: "int imat = ReadInteger(...) -
-  // 1;"), so the matching SetMedium/DriftMedium index here is 0, not 1 --
-  // see the gmsh_elmer_garfield_pipeline_gotchas memory note.
-  elm.SetMedium(0, &gas);
-  elm.DriftMedium(0);
+  // geo.gas_material_index is read from the actual "Gas" physical group ID
+  // the geometry builder wrote (model_info.hh), not hardcoded -- see that
+  // struct's own comment and docs/pipeline_gotchas.md #8 (ComponentElmer
+  // subtracts 1 from mesh.names' 1-based body ID) and GitHub issue #6 item 3.
+  elm.SetMedium(geo.gas_material_index, &gas);
+  elm.DriftMedium(geo.gas_material_index);
 
   ViewField vf;
   vf.SetComponent(&elm);

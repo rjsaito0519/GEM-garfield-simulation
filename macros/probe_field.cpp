@@ -17,6 +17,8 @@
 #include "Garfield/ComponentElmer.hh"
 #include "Garfield/MediumMagboltz.hh"
 
+#include "model_info.hh"
+
 using namespace Garfield;
 
 namespace {
@@ -39,17 +41,22 @@ int main(int argc, char* argv[]) {
   }
   const std::string meshDir = std::string(argv[1]) + "/";
   const std::string baseName = std::filesystem::path(argv[1]).filename().string();
+  const gem::ModelGeometryInfo geo = gem::LoadModelGeometryInfo(argv[1], baseName);
 
   MediumMagboltz gas;
   gas.SetComposition("ar", 90., "ch4", 10.);
   gas.SetTemperature(293.15);
   gas.SetPressure(760.);
 
+  // geo.gas_material_index is read from the actual "Gas" physical group ID
+  // the geometry builder wrote (model_info.hh), not hardcoded -- see that
+  // struct's own comment and docs/pipeline_gotchas.md #8 (ComponentElmer
+  // subtracts 1 from mesh.names' 1-based body ID) and GitHub issue #6 item 3.
   ComponentElmer elm(meshDir + "mesh.header", meshDir + "mesh.elements",
                       meshDir + "mesh.nodes", meshDir + "dielectrics.dat",
                       meshDir + baseName + ".result", "cm");
-  elm.SetMedium(0, &gas);
-  elm.DriftMedium(0);
+  elm.SetMedium(geo.gas_material_index, &gas);
+  elm.DriftMedium(geo.gas_material_index);
 
   for (int i = 2; i < argc; ++i) {
     const auto p = ParsePoint(argv[i]);
