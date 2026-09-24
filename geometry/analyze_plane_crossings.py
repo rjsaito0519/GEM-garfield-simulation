@@ -211,7 +211,13 @@ def _load_config_from_run_info(root_path: str) -> TripleGemTestConfig | None:
                 hole_outer_radius_cm=layer["hole_outer_radius_cm"],
                 copper_thickness_cm=layer["copper_thickness_cm"],
                 dielectric_thickness_cm=layer["dielectric_thickness_cm"],
-                dielectric_relative_permittivity=layer["dielectric_relative_permittivity"],
+                # .get() with a fallback, not layer[...]: this per-layer field
+                # was added slightly after "layers" itself (GitHub issue #6
+                # item 5), so a file built in between has "layers" but not
+                # this key. Not used by any z-position/pitch/radius
+                # calculation in this script, so a stale/default fallback
+                # value can't silently affect this script's actual output.
+                dielectric_relative_permittivity=layer.get("dielectric_relative_permittivity", 3.5),
             ),
             voltage_v=layer["voltage_v"],
         )
