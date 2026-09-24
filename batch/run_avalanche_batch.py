@@ -88,6 +88,8 @@ def _validate_part(job: dict) -> list[str]:
         "rng_seed": str(job["seed"]),
         "event_offset": str(job["offset"]),
         "n_events": str(job["n_events"]),
+        "avalanche_size_limit": str(job["avalanche_size_limit"]),
+        "geometry_type": job["geometry_type"],
     }
     for key, want in expected.items():
         got = run_info.get(key)
@@ -237,6 +239,7 @@ def main() -> None:
             "index": i, "n_events": n_events, "offset": offset, "seed": seed,
             "part_dir": part_dir, "part_root_path": part_root_path,
             "log_path": log_path, "command": cmd, "job_id": None,
+            "avalanche_size_limit": args.avalanche_size_limit, "geometry_type": base_name,
         })
 
     print(f"base_name={base_name}, {len(jobs)} jobs covering {args.n_events_total} events total:")
