@@ -80,6 +80,14 @@ def main() -> None:
     parser.add_argument("--queue", default=DEFAULT_QUEUE)
     parser.add_argument("--poll-interval", type=float, default=15.0)
     parser.add_argument(
+        "--base-seed", type=int, default=None,
+        help="Explicit RNG base seed; job i uses (base_seed + i). Defaults to a "
+             "time-derived value, printed below, if not given. Each job's actual "
+             "seed is passed to export_avalanche_trajectories' seed argument -- "
+             "see GitHub issue #5 item 4 and that macro's own comment for why this "
+             "is needed instead of relying on its per-process auto-seeding.",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true",
         help="Print what would be submitted/merged; never call bsub or touch the LSF queue.",
     )
@@ -102,30 +110,40 @@ def main() -> None:
     batch_tmp_dir = os.path.join(RESULTS_ROOT_DIR, ".batch_tmp", base_name)
     os.makedirs(batch_tmp_dir, exist_ok=True)
 
+    # Each job's own explicit seed, base_seed + job index -- NOT relying on
+    # export_avalanche_trajectories' per-process auto-seeding, even though
+    # that was verified independent across jobs (2026-09-24): explicit
+    # per-job seeds make a batch run reproducible (rerun with the same
+    # --base-seed to get bit-identical results) and don't depend on that
+    # auto-seeding behavior continuing to hold.
+    base_seed = args.base_seed if args.base_seed is not None else int(time.time())
+    print(f"base_seed={base_seed} (job i uses seed {base_seed}+i)")
+
     jobs = []  # (job_id_or_None, part_out_dir, part_root_path, log_path)
     for i, (n_events, offset) in enumerate(chunks):
         part_dir = os.path.join(batch_tmp_dir, f"part{i:03d}")
         os.makedirs(part_dir, exist_ok=True)
         part_root_path = os.path.join(part_dir, f"{base_name}_avalanche.root")
         log_path = os.path.join(part_dir, "bsub.log")
+        seed = base_seed + i
         cmd = (
             f"cd {os.path.dirname(MACRO_BINARY)} && "
             f"./export_avalanche_trajectories "
             f"{args.mesh_dir} {args.gas_file} {n_events} "
             f"{args.z_sensor_min} {args.z_sensor_max} {args.z_injection} "
             f"{args.x_half_cm} {args.y_half_cm} {args.e0_ev} {args.injection_radius_cm} "
-            f"{part_dir} {args.collision_steps} {offset}"
+            f"{part_dir} {args.collision_steps} {offset} {seed}"
         )
         jobs.append({
-            "index": i, "n_events": n_events, "offset": offset,
+            "index": i, "n_events": n_events, "offset": offset, "seed": seed,
             "part_dir": part_dir, "part_root_path": part_root_path,
             "log_path": log_path, "command": cmd, "job_id": None,
         })
 
     print(f"base_name={base_name}, {len(jobs)} jobs covering {args.n_events_total} events total:")
     for j in jobs:
-        print(f"  job {j['index']:3d}: {j['n_events']:4d} events, offset={j['offset']:5d} "
-              f"-> {j['part_root_path']}")
+        print(f"  job {j['index']:3d}: {j['n_events']:4d} events, offset={j['offset']:5d}, "
+              f"seed={j['seed']} -> {j['part_root_path']}")
 
     if args.dry_run:
         print("\n--dry-run: not calling bsub. Commands that would be submitted:")

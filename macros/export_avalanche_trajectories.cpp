@@ -64,6 +64,7 @@
 #include "Garfield/ComponentElmer.hh"
 #include "Garfield/MediumMagboltz.hh"
 #include "Garfield/Random.hh"
+#include "Garfield/RandomEngineRoot.hh"
 #include "Garfield/Sensor.hh"
 
 using namespace Garfield;
@@ -72,7 +73,8 @@ int main(int argc, char* argv[]) {
   if (argc < 9) {
     std::cout << "Usage: export_avalanche_trajectories <mesh/result dir> <.gas file> "
                  "<n events> <zSensorMin> <zSensorMax> <zInjection> <xHalfCm> <yHalfCm> "
-                 "[e0_eV] [injectionRadiusCm] [output dir]\n";
+                 "[e0_eV] [injectionRadiusCm] [output dir] [collisionSteps] [eventOffset] "
+                 "[seed]\n";
     return 1;
   }
   const std::string meshDir = std::string(argv[1]) + "/";
@@ -95,6 +97,33 @@ int main(int argc, char* argv[]) {
   // table question -- see docs/debugging_notes.md.
   const int collisionSteps = argc > 12 ? std::atoi(argv[12]) : 100;
   const int eventOffset = argc > 13 ? std::atoi(argv[13]) : 0;
+  // Explicit RNG seed (default: none -- Garfield's own default engine,
+  // Garfield::RandomEngineRoot, auto-seeds itself via ROOT's TRandom3::
+  // SetSeed(0), which draws from time+PID and is independent per process;
+  // verified empirically across a real 10-job bsub batch, 2026-09-24, that
+  // this already gives genuinely independent event sequences per job with
+  // no explicit seeding). Pass an explicit seed for reproducibility (e.g.
+  // batch/run_avalanche_batch.py derives one per job from a shared base
+  // seed + job index) instead of relying on that auto-seeding -- see
+  // docs/debugging_notes.md and GitHub issue #5 item 4.
+  const bool hasExplicitSeed = argc > 14;
+  const unsigned int seed = hasExplicitSeed ? static_cast<unsigned int>(std::stoul(argv[14])) : 0;
+  if (hasExplicitSeed) {
+    // NOT RandomEngineRoot(seed) (the parameterized constructor) -- that
+    // constructor has a real Garfield++ bug (confirmed 2026-09-23/24,
+    // isolated in a standalone reproducer): it calls SetSeed() via the base
+    // RandomEngine<> constructor *before* the derived class's own m_rng
+    // member is constructed, so the explicit seed is silently clobbered
+    // when m_rng's default constructor then runs (TRandom3's own fixed
+    // default seed, 4357) -- every seed value ends up producing the exact
+    // same sequence. Default-construct (correctly self-seeds AND properly
+    // constructs m_rng) then call SetSeed() as a separate step instead.
+    RandomEngineRoot engine;
+    engine.SetSeed(seed);
+    Random::SetEngine(engine);
+  }
+  std::cout << "RNG seed: " << (hasExplicitSeed ? std::to_string(seed) : "auto (process-default)")
+            << "\n";
 
   MediumMagboltz gas;
   if (!gas.LoadGasFile(gasFile)) {
@@ -126,8 +155,14 @@ int main(int argc, char* argv[]) {
   // (every 100 collisions) an interior point gets recorded.
   aval.EnableDriftLines();
   // Same safety cap as gem_avalanche.cpp -- see its comment on the same
-  // call for why.
-  aval.EnableAvalancheSizeLimit(2000);
+  // call for why. Recorded per event below (GitHub issue #5 item 1) so a
+  // scan that pushes gain high enough to actually hit this can be
+  // detected instead of silently truncating -- at the voltages used so
+  // far (up to 1.15x GEM voltage multiplier) the largest observed event
+  // was 924 tracks, well under this, but that's not guaranteed to hold at
+  // higher voltage.
+  constexpr std::size_t kAvalancheSizeLimit = 2000;
+  aval.EnableAvalancheSizeLimit(kAvalancheSizeLimit);
 
   const std::string rootPath = outDir + baseName + "_avalanche.root";
   TFile* rootFile = TFile::Open(rootPath.c_str(), "UPDATE");
@@ -147,9 +182,12 @@ int main(int argc, char* argv[]) {
   trajectoriesTree.Branch("status", &b_status);
 
   const double t0 = 0.;
+  int nEventsAtCap = 0;
   for (int i = 0; i < nEvents; ++i) {
     // Same injection convention as gem_avalanche.cpp: small random offset
-    // around the hole axis, direction (0,0,-1) (downstream).
+    // around the hole axis, direction (0,0,-1) (downstream). r = R*U is
+    // deliberately not uniform-in-area -- see gem_avalanche.cpp's comment
+    // on the same pattern (GitHub issue #5 item 5) for why.
     const double r = injectionRadiusCm * RndmUniform();
     const double phi = 2. * M_PI * RndmUniform();
     const double x0 = r * std::cos(phi);
@@ -168,12 +206,23 @@ int main(int argc, char* argv[]) {
         ++nPoints;
       }
     }
+    const bool atCap = electrons.size() >= kAvalancheSizeLimit;
+    if (atCap) ++nEventsAtCap;
     std::cout << "Event " << i << "/" << nEvents << " (global event "
                << (i + eventOffset) << "): " << electrons.size()
-               << " electron tracks, " << nPoints << " trajectory points\n";
+               << " electron tracks, " << nPoints << " trajectory points"
+               << (atCap ? " [AVALANCHE SIZE LIMIT HIT -- truncated, not a genuine final size]" : "")
+               << "\n";
   }
   trajectoriesTree.Write();
   rootFile->Close();
   std::cout << "Wrote " << rootPath << " (tree \"Trajectories\")\n";
+  std::cout << "Avalanche size limit (" << kAvalancheSizeLimit << ") hit in " << nEventsAtCap
+            << "/" << nEvents << " events"
+            << (nEventsAtCap > 0
+                    ? " -- those events' reported sizes are truncated, not genuine avalanche "
+                      "sizes; raise EnableAvalancheSizeLimit if this matters for the current scan"
+                    : "")
+            << "\n";
   return 0;
 }

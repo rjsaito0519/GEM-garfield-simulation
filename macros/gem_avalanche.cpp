@@ -20,7 +20,7 @@
  * Usage: gem_avalanche <mesh/result dir> <.gas file> <n events>
  *                       <zSensorMin> <zSensorMax> <zInjection>
  *                       <xHalfCm> <yHalfCm> [e0_eV] [injectionRadiusCm]
- *                       [rootOutDir] [imgOutDir] [maxElectronEnergyEv]
+ *                       [rootOutDir] [imgOutDir] [maxElectronEnergyEv] [seed]
  *   zSensorMin/Max: the sensor's z bounds [cm], from the induction/transfer
  *     plane at the bottom to the drift plane at the top (see the model's
  *     printed electrode potentials, or its mesh cross-section plot, for
@@ -59,6 +59,7 @@
 #include "Garfield/ComponentElmer.hh"
 #include "Garfield/MediumMagboltz.hh"
 #include "Garfield/Random.hh"
+#include "Garfield/RandomEngineRoot.hh"
 #include "Garfield/Sensor.hh"
 #include "Garfield/ViewDrift.hh"
 
@@ -97,6 +98,20 @@ int main(int argc, char* argv[]) {
   // docs/debugging_notes.md). 0 (default) leaves Magboltz's own
   // auto-extension behavior untouched.
   const double maxElectronEnergyEv = argc > 13 ? std::stod(argv[13]) : 0.0;
+  // Explicit RNG seed, same convention as export_avalanche_trajectories.cpp
+  // -- see that macro's comment and GitHub issue #5 item 4 for why.
+  const bool hasExplicitSeed = argc > 14;
+  const unsigned int seed = hasExplicitSeed ? static_cast<unsigned int>(std::stoul(argv[14])) : 0;
+  if (hasExplicitSeed) {
+    // NOT RandomEngineRoot(seed) -- see export_avalanche_trajectories.cpp's
+    // comment on the same pattern for the Garfield++ constructor bug this
+    // works around.
+    RandomEngineRoot engine;
+    engine.SetSeed(seed);
+    Random::SetEngine(engine);
+  }
+  std::cout << "RNG seed: " << (hasExplicitSeed ? std::to_string(seed) : "auto (process-default)")
+            << "\n";
 
   // Must come *before* constructing TApplication: otherwise TApplication's
   // own construction tries to connect to the X11 display named by $DISPLAY,
@@ -140,8 +155,11 @@ int main(int argc, char* argv[]) {
   // certainly one event's avalanche growing pathologically large (or stuck)
   // rather than genuinely needing that much computation. Bound it so a
   // single bad event cannot hang the whole run; GetAvalancheSize() still
-  // reports whatever size it reached when cut off.
-  aval.EnableAvalancheSizeLimit(2000);
+  // reports whatever size it reached when cut off -- meaning that reported
+  // "gain" is a truncated lower bound, not a genuine final size, for any
+  // event that hits this (tracked and flagged below, GitHub issue #5 item 1).
+  constexpr int kAvalancheSizeLimit = 2000;
+  aval.EnableAvalancheSizeLimit(kAvalancheSizeLimit);
 
   const double t0 = 0.;
 
@@ -173,9 +191,22 @@ int main(int argc, char* argv[]) {
   std::vector<int> gains;
   std::map<int, int> endpointStatusCounts;
   gains.reserve(nEvents);
+  int nEventsAtCap = 0;
   for (int i = 0; i < nEvents; ++i) {
     // Small random offset around the hole axis, matching the now-deleted
     // prototype's convention (test/gem_simulation/gem_avalanche.C).
+    // NOTE (GitHub issue #5 item 5): r = R*U is NOT uniform-in-area on the
+    // disk (that would be r = R*sqrt(U)) -- it's biased toward the center.
+    // Left as-is deliberately: injectionRadiusCm is tiny (a few um to a few
+    // tens of um) purely to seed electrons very close to the hole axis for
+    // this diagnostic near-axis injection, not to model any physically
+    // realistic entry-position distribution -- see also the injection
+    // *direction* comment below (also intentionally simplified, not meant
+    // to reproduce a real post-drift-diffusion angular distribution). If a
+    // future study needs genuine uniform-area sampling (e.g. to compare
+    // against a wider, physically-motivated entry distribution), change
+    // this to r = injectionRadiusCm * std::sqrt(RndmUniform()) -- discuss
+    // first, this changes simulation results.
     const double r = injectionRadiusCm * RndmUniform();
     const double phi = 2. * M_PI * RndmUniform();
     const double x0 = r * std::cos(phi);
@@ -194,7 +225,10 @@ int main(int argc, char* argv[]) {
     int ne = 0, ni = 0;
     aval.GetAvalancheSize(ne, ni);
     gains.push_back(ne);
-    std::cout << "Event " << i << "/" << nEvents << ": gain = " << ne << "\n";
+    const bool atCap = ne >= kAvalancheSizeLimit;
+    if (atCap) ++nEventsAtCap;
+    std::cout << "Event " << i << "/" << nEvents << ": gain = " << ne
+               << (atCap ? " [AVALANCHE SIZE LIMIT HIT -- truncated]" : "") << "\n";
 
     // Tally why each secondary electron's drift line ended (see
     // GarfieldConstants.hh): e.g. StatusLeftDriftMedium (-5, hit solid
@@ -225,6 +259,14 @@ int main(int argc, char* argv[]) {
     std::cout << "  status " << status << ": " << count << "\n";
   }
 
+  // "gains" here is GetAvalancheSize()'s ne: the total number of electrons
+  // produced within one primary event's avalanche tree (including ones
+  // later absorbed by a wall/electrode), NOT a detector "effective gain"
+  // (electrons actually reaching the readout/next stage) -- that has to be
+  // computed separately from genuine plane crossings (see
+  // geometry/analyze_plane_crossings.py and docs/debugging_notes.md,
+  // GitHub issue #5 item 2). Printed as "avalanche size" below, not "gain",
+  // to avoid conflating the two.
   double sum = 0., sumSq = 0.;
   for (const int g : gains) {
     sum += g;
@@ -232,8 +274,17 @@ int main(int argc, char* argv[]) {
   }
   const double mean = sum / gains.size();
   const double variance = sumSq / gains.size() - mean * mean;
-  std::cout << "Mean gain = " << mean << " +/- " << std::sqrt(std::max(0., variance))
-            << " (n = " << gains.size() << " events)\n";
+  const double rms = std::sqrt(std::max(0., variance));
+  // RMS (event-to-event spread) and the standard error on the mean
+  // (RMS/sqrt(N), how precisely the mean itself is known) are different
+  // quantities -- the old "mean +/- sqrt(variance)" print conflated them,
+  // reading like an uncertainty on the mean when it was actually the
+  // distribution width (GitHub issue #5 item 3).
+  const double meanStdErr = rms / std::sqrt(static_cast<double>(gains.size()));
+  std::cout << "Mean avalanche size = " << mean << ", RMS = " << rms
+            << ", standard error on the mean = " << meanStdErr
+            << " (n = " << gains.size() << " events, " << nEventsAtCap
+            << " hit the avalanche size limit)\n";
 
   TCanvas canvas("c", "Drift lines", 800, 800);
   driftView.SetCanvas(&canvas);
