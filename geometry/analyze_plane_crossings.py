@@ -279,7 +279,34 @@ def main() -> None:
               "branch addition) -- endpoint-fate classification skipped. "
               "Re-run export_avalanche_trajectories to get one.\n")
 
-    keys = [tuple(k) for k in np.unique(np.stack([event, track], axis=1), axis=0)]
+    # Group rows by (event, track) via one stable sort instead of, for every
+    # unique key, re-scanning the *entire* flat array with a fresh boolean
+    # mask (event == ev) & (track == tr) -- that original approach is
+    # O(n_tracks * n_points) in both time and (because every one of those
+    # full-length boolean masks was cached in a dict for reuse later)
+    # memory, which is fine for a few thousand tracks but failed outright
+    # (ArrayMemoryError) on a 7x7-tiled, Penning-transfer-enabled run: 67498
+    # tracks x a 21.3M-point tree (2026-09-24, GitHub issue #7). np.lexsort
+    # is a stable sort, so within each resulting group the original
+    # recorded path order (point sequence) is preserved exactly, same as
+    # boolean-mask indexing was -- this is a pure performance/memory
+    # rewrite, not a change to any of the actual analysis logic below.
+    order = np.lexsort((track, event))
+    event, track, x, y, z = event[order], track[order], x[order], y[order], z[order]
+    if has_status:
+        status = status[order]
+    n_points = len(event)
+    is_new_group = np.empty(n_points, dtype=bool)
+    is_new_group[0] = True
+    is_new_group[1:] = (event[1:] != event[:-1]) | (track[1:] != track[:-1])
+    group_start = np.nonzero(is_new_group)[0]
+    group_end = np.concatenate([group_start[1:], [n_points]])
+    keys = list(zip(event[group_start].tolist(), track[group_start].tolist()))
+    # (ev,tr) -> slice into the now-sorted flat arrays (a view, not a copy --
+    # z[track_masks[key]] etc. below work identically whether the value is a
+    # slice or a boolean mask).
+    track_masks = {key: slice(int(s), int(e)) for key, s, e in zip(keys, group_start, group_end)}
+
     n_total = len(keys)
     if n_total == 0:
         print("No tracks found in the Trajectories tree.")
@@ -290,19 +317,17 @@ def main() -> None:
 
     # --- Birth region breakdown -----------------------------------------
     birth_counts: dict[str, int] = {}
-    track_masks = {}  # (ev,tr) -> boolean mask into the flat arrays, cached
     track_z_birth = {}
     track_birth_label = {}
     track_r_birth_cm = {}  # sqrt(x_birth^2 + y_birth^2), for the radial-extraction test below
-    for ev, tr in keys:
-        m = (event == ev) & (track == tr)
-        track_masks[(ev, tr)] = m
+    for key in keys:
+        m = track_masks[key]
         z_birth = z[m][0]
-        track_z_birth[(ev, tr)] = z_birth
+        track_z_birth[key] = z_birth
         label = _classify_z(z_birth, birth_regions)
         birth_counts[label] = birth_counts.get(label, 0) + 1
-        track_birth_label[(ev, tr)] = label
-        track_r_birth_cm[(ev, tr)] = float(np.hypot(x[m][0], y[m][0]))
+        track_birth_label[key] = label
+        track_r_birth_cm[key] = float(np.hypot(x[m][0], y[m][0]))
     print("Birth region (first recorded point of each track):")
     for label, _, _ in birth_regions:
         c = birth_counts.get(label, 0)
@@ -415,9 +440,8 @@ def main() -> None:
         print("\nFinal fate of the GEM1-extracted cohort (last recorded point + status):")
         fate_counts: dict[str, int] = {}
         for key in cohort:
-            m = track_masks[key]
-            idx = np.nonzero(m)[0]
-            last = idx[-1]
+            m = track_masks[key]  # a slice, see the grouping comment above
+            last = m.stop - 1
             st = int(status[last])
             z_last = z[last]
             region = _classify_z(z_last, birth_regions)
