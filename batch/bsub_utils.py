@@ -48,22 +48,29 @@ def build_login_shell_command(shell_command: str) -> list[str]:
 
 def submit(
     shell_command: str, queue: str, log_path: str, job_name: str | None = None,
-    mem_mb: int | None = None,
+    mem_mb: int | None = None, n_slots: int | None = None,
 ) -> int:
     """Submit shell_command (a full shell command string, e.g.
     "cd .../macros/build && ./export_avalanche_trajectories ...") via
     `bsub -q <queue> -o <log_path>`, running it inside a login shell (see
     build_login_shell_command). Returns the parsed LSF job id.
 
+    Every queue on this cluster was confirmed 2026-09-24 to have a hard
+    per-slot MEMLIMIT of 4GB (`bqueues -l <queue>`) that `-M` cannot exceed
+    at n=1 -- bsub itself rejects a too-high -M with "MEMLIMIT: Cannot
+    exceed queue's hard limit(s)". A triple_gem_field_v1.15x_n9 (9.6M-node)
+    avalanche job needs ~5.6GB RSS (measured locally), already over that.
+
+    n_slots: request this many job slots (`-n <n_slots> -R "span[hosts=1]"`,
+    all on one host since this is a single-process job, not real MPI/thread
+    parallelism) -- on this cluster the per-job memory budget scales with
+    slot count (n_slots x the queue's per-slot MEMLIMIT), so this is the
+    actual way to get a large-mesh job enough headroom, not mem_mb/-M
+    (still supported below for a value under the per-slot cap, but mostly
+    superseded by this for anything that needs more than 4GB).
+
     mem_mb: explicit memory request in MB, passed as both `-M` (hard limit)
-    and `-R "rusage[mem=...]"` (scheduler reservation). Without this, the
-    queue's own default limit applies -- confirmed 2026-09-24 to be 4000MB
-    for queue "s" on this cluster (not something this script ever set), which
-    is nowhere near enough for a large/finely-tiled mesh: a
-    triple_gem_field_v1.15x_n9 (9.6M-node) avalanche job was killed
-    (TERM_MEMLIMIT, exit 137) hitting exactly that 4096MB ceiling. Pass a
-    generous mem_mb for any mesh past roughly n_cells=7 (see
-    docs/debugging_notes.md).
+    and `-R "rusage[mem=...]"` (scheduler reservation).
 
     Raises RuntimeError if bsub's stdout doesn't match the expected
     "Job <NNN> is submitted to queue <...>" response.
@@ -71,8 +78,19 @@ def submit(
     cmd = ["bsub", "-q", queue, "-o", log_path]
     if job_name:
         cmd += ["-J", job_name]
+    if n_slots is not None and n_slots > 1:
+        cmd += ["-n", str(n_slots)]
+    # Only one -R is meaningful to bsub -- combine span/rusage into one
+    # resource-requirement string instead of passing -R twice (the second
+    # would silently override the first, dropping span[hosts=1]).
+    resource_parts = []
+    if n_slots is not None and n_slots > 1:
+        resource_parts.append("span[hosts=1]")
     if mem_mb is not None:
-        cmd += ["-M", str(mem_mb), "-R", f"rusage[mem={mem_mb}]"]
+        resource_parts.append(f"rusage[mem={mem_mb}]")
+        cmd += ["-M", str(mem_mb)]
+    if resource_parts:
+        cmd += ["-R", " ".join(resource_parts)]
     cmd += build_login_shell_command(shell_command)
     proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if proc.returncode != 0:

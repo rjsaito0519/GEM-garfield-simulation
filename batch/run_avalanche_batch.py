@@ -100,11 +100,20 @@ def main() -> None:
     parser.add_argument(
         "--mem-mb", type=int, default=None,
         help="Explicit bsub memory request in MB (both -M and -R rusage[mem=...]). "
-             "Without this, queue s's own default (4000MB, confirmed 2026-09-24) "
-             "applies, which is nowhere near enough for a large/finely-tiled mesh -- "
-             "a triple_gem_field_v1.15x_n9 (9.6M-node) job was TERM_MEMLIMIT-killed "
-             "at exactly that ceiling. Pass a generous value (e.g. 16000) for any "
-             "mesh past roughly n_cells=7.",
+             "Every queue on this cluster has a hard per-slot MEMLIMIT of 4GB "
+             "(confirmed 2026-09-24, bqueues -l) that bsub itself refuses to exceed "
+             "via -M at the default 1 slot -- use --slots-per-job instead for a job "
+             "that needs more than 4GB; this is for a value under that per-slot cap.",
+    )
+    parser.add_argument(
+        "--slots-per-job", type=int, default=1,
+        help="bsub -n <N> per job (all on one host, -R span[hosts=1]) -- on this "
+             "cluster the per-job memory budget scales with slot count (N x the "
+             "queue's per-slot MEMLIMIT, 4GB), so this is how to get a large-mesh "
+             "avalanche job enough headroom. A triple_gem_field_v1.15x_n9 (9.6M-node) "
+             "job needs ~5.6GB RSS (measured locally, 2026-09-24) -- try 2 first, "
+             "raise to 3/4/... if a job still gets TERM_MEMLIMIT-killed. Default 1 "
+             "(no change from before this option existed).",
     )
     parser.add_argument(
         "--dry-run", action="store_true",
@@ -166,9 +175,18 @@ def main() -> None:
 
     if args.dry_run:
         print("\n--dry-run: not calling bsub. Commands that would be submitted:")
-        mem_flags = f"-M {args.mem_mb} -R rusage[mem={args.mem_mb}] " if args.mem_mb else ""
+        resource_parts = []
+        n_flag = ""
+        if args.slots_per_job > 1:
+            n_flag = f"-n {args.slots_per_job} "
+            resource_parts.append("span[hosts=1]")
+        if args.mem_mb:
+            resource_parts.append(f"rusage[mem={args.mem_mb}]")
+        mem_flag = f"-M {args.mem_mb} " if args.mem_mb else ""
+        r_flag = f"-R \"{' '.join(resource_parts)}\" " if resource_parts else ""
         for j in jobs:
-            print(f"  bsub -q {args.queue} {mem_flags}-o {j['log_path']} bash -lc \"{j['command']}\"")
+            print(f"  bsub -q {args.queue} {n_flag}{mem_flag}{r_flag}-o {j['log_path']} "
+                  f"bash -lc \"{j['command']}\"")
         print("\n--dry-run: stopping before submission/merge.")
         return
 
@@ -177,7 +195,7 @@ def main() -> None:
         j["job_id"] = bsub_utils.submit(
             j["command"], queue=args.queue, log_path=j["log_path"],
             job_name=f"{base_name}_avalanche_part{j['index']:03d}",
-            mem_mb=args.mem_mb,
+            mem_mb=args.mem_mb, n_slots=args.slots_per_job,
         )
         print(f"  job {j['index']:3d}: submitted as LSF job {j['job_id']}")
 
