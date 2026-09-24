@@ -25,13 +25,22 @@ Usage:
       <zSensorMin> <zSensorMax> <zInjection> <xHalfCm> <yHalfCm>
       [e0_eV] [injectionRadiusCm] [collisionSteps]
       [--njobs N] [--queue NAME] [--poll-interval SEC]
-      [--avalanche-size-limit N] [--dry-run]
+      [--avalanche-size-limit N] [--mem-mb N] [--slots-per-job N] [--dry-run]
 
 Output: results/root/<baseName>_avalanche.root, exactly as a normal serial
 export_avalanche_trajectories run would produce (so nothing downstream
-needs to change). Per-job intermediates (partial ROOT files, bsub logs)
-are kept under results/root/.batch_tmp/<baseName>/ for debugging, not
-deleted automatically.
+needs to change), plus a small "BatchMergeProvenance" tree recording which
+parts/seeds/offsets went into it (GitHub issue #9 item 4). Per-job
+intermediates (partial ROOT files, bsub logs) are kept under
+results/root/.batch_tmp/<baseName>/<run_id>/ for debugging, not deleted
+automatically -- run_id is a fresh timestamp every invocation, so a failed
+run's leftovers can never get merged into a later run's output (GitHub
+issue #9 item 1). The merge only happens if every single job finishes
+LSF-status DONE and each part's own RunInfo matches what this run actually
+submitted for it (seed/event_offset/n_events, GitHub issue #9 items 2-3);
+otherwise no "final" output is written at all, and the run must be
+re-submitted (getting its own fresh run_id) after the underlying problem
+is fixed.
 """
 
 import argparse
@@ -40,6 +49,9 @@ import subprocess
 import sys
 import time
 
+import numpy as np
+import uproot
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bsub_utils
 
@@ -47,6 +59,41 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MACRO_BINARY = os.path.join(REPO_ROOT, "macros", "build", "export_avalanche_trajectories")
 RESULTS_ROOT_DIR = os.path.join(REPO_ROOT, "results", "root")
 DEFAULT_QUEUE = "s"  # confirmed Open:Active on this cluster via `bqueues`, 2026-09-24
+
+
+def _read_run_info(root_path: str) -> dict[str, str]:
+    """The (key, value) pairs from a part file's own "RunInfo" tree, as a
+    plain dict (see macros/run_info.hh) -- used to cross-check that a part
+    file actually matches what *this* run expected of it (GitHub issue #9
+    item 3), not just that some file happens to exist at that path."""
+    with uproot.open(root_path) as f:
+        if "RunInfo" not in f:
+            return {}
+        arr = f["RunInfo"].arrays(["key", "value"], library="np")
+    return dict(zip(arr["key"], arr["value"]))
+
+
+def _validate_part(job: dict) -> list[str]:
+    """Problems found cross-checking a part's own RunInfo against what this
+    run actually submitted for it -- empty list means it's consistent.
+    Missing RunInfo entirely (an older export_avalanche_trajectories build)
+    is reported as a problem too, not silently skipped, since GitHub issue
+    #9 wants this checked whenever it's possible to check."""
+    run_info = _read_run_info(job["part_root_path"])
+    if not run_info:
+        return ["no RunInfo tree in part file -- cannot verify it matches this run "
+                "(rebuild macros/export_avalanche_trajectories if this is unexpected)"]
+    problems = []
+    expected = {
+        "rng_seed": str(job["seed"]),
+        "event_offset": str(job["offset"]),
+        "n_events": str(job["n_events"]),
+    }
+    for key, want in expected.items():
+        got = run_info.get(key)
+        if got != want:
+            problems.append(f"RunInfo[{key!r}] = {got!r}, expected {want!r}")
+    return problems
 
 
 def _split_events(n_events_total: int, n_jobs: int) -> list[tuple[int, int]]:
@@ -121,6 +168,15 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # Explicit, loud validation up front (GitHub issue #9) -- argparse's
+    # type=int/float already rejects non-numeric input, but not <= 0, which
+    # would otherwise surface later as a confusing failure deep in
+    # _split_events or bsub itself.
+    if args.njobs <= 0:
+        parser.error(f"--njobs must be > 0, got {args.njobs}")
+    if args.n_events_total <= 0:
+        parser.error(f"n_events_total must be > 0, got {args.n_events_total}")
+
     if not os.path.isfile(MACRO_BINARY):
         parser.error(f"Binary not found: {MACRO_BINARY} (build it first, see docs/reference.md)")
 
@@ -135,8 +191,22 @@ def main() -> None:
     if not chunks:
         parser.error("n_events_total is too small to split into any non-empty chunk")
 
-    batch_tmp_dir = os.path.join(RESULTS_ROOT_DIR, ".batch_tmp", base_name)
-    os.makedirs(batch_tmp_dir, exist_ok=True)
+    # Run-scoped part directory, not a bare .batch_tmp/<baseName>/ reused
+    # across every invocation (GitHub issue #9): reusing the same partXXX/
+    # paths meant a failed job's *previous* run's ROOT file could still be
+    # sitting there when this run's merge step only checks file existence,
+    # not which run actually produced it -- confirmed happening for real
+    # 2026-09-25 (triple_gem_field_v1.15x_n9: 6/10 jobs EXITed but the
+    # merge went ahead anyway using whatever files existed, some left over
+    # from an earlier failed attempt; the resulting file was quarantined,
+    # not used). A fresh timestamped subdirectory per invocation means a
+    # failed run can never contaminate a later one, and nothing here is
+    # ever silently reused across runs.
+    run_id = time.strftime("%Y%m%dT%H%M%S")
+    batch_tmp_dir = os.path.join(RESULTS_ROOT_DIR, ".batch_tmp", base_name, run_id)
+    if not args.dry_run:
+        os.makedirs(batch_tmp_dir, exist_ok=True)
+    print(f"run_id={run_id} (part directory: {batch_tmp_dir})")
 
     # Each job's own explicit seed, base_seed + job index -- NOT relying on
     # export_avalanche_trajectories' per-process auto-seeding, even though
@@ -150,7 +220,8 @@ def main() -> None:
     jobs = []  # (job_id_or_None, part_out_dir, part_root_path, log_path)
     for i, (n_events, offset) in enumerate(chunks):
         part_dir = os.path.join(batch_tmp_dir, f"part{i:03d}")
-        os.makedirs(part_dir, exist_ok=True)
+        if not args.dry_run:
+            os.makedirs(part_dir, exist_ok=True)
         part_root_path = os.path.join(part_dir, f"{base_name}_avalanche.root")
         log_path = os.path.join(part_dir, "bsub.log")
         seed = base_seed + i
@@ -212,24 +283,69 @@ def main() -> None:
     print(f"\nPolling every {args.poll_interval}s until all jobs finish ...")
     final_statuses = cache.wait_all(job_ids, poll_interval_s=args.poll_interval, on_update=_report)
 
-    failed = [j for j in jobs if final_statuses.get(j["job_id"]) == "EXIT"]
-    if failed:
-        print(f"\nWARNING: {len(failed)} job(s) reported EXIT (check their logs):")
-        for j in failed:
-            print(f"  job {j['index']:3d}: {j['log_path']}")
+    # Strict DONE-only merge condition (GitHub issue #9 item 2): a job
+    # that's EXIT, or UNKNOWN (aged out of `bjobs -a` before we could
+    # confirm which -- ambiguous, not "probably fine"), blocks the merge
+    # entirely. A merge that silently went ahead using whatever part files
+    # happened to exist, regardless of job status, is exactly how a stale
+    # or truncated part got folded into a "successful" output for real on
+    # 2026-09-25 -- no "final" file gets written at all now unless every
+    # single part is confirmed DONE.
+    not_done = [j for j in jobs if final_statuses.get(j["job_id"]) != "DONE"]
+    if not_done:
+        print(f"\nERROR: {len(not_done)}/{len(jobs)} job(s) did not finish DONE -- refusing to "
+              f"merge (no partial/best-effort output is written):")
+        for j in not_done:
+            status = final_statuses.get(j["job_id"], "UNKNOWN")
+            print(f"  job {j['index']:3d}: status={status} (see {j['log_path']})")
+        print(f"\nPart directory kept at {batch_tmp_dir} for inspection. Fix the underlying "
+              f"issue (see the logs above) and re-run the whole batch -- it gets a fresh "
+              f"run_id, so this won't collide with the failed attempt.")
+        sys.exit(1)
 
     missing = [j for j in jobs if not os.path.isfile(j["part_root_path"])]
     if missing:
-        print(f"\nERROR: {len(missing)} part file(s) missing, cannot merge:")
+        print(f"\nERROR: {len(missing)} part file(s) missing despite DONE status, cannot merge:")
         for j in missing:
             print(f"  job {j['index']:3d}: expected {j['part_root_path']} (see {j['log_path']})")
         sys.exit(1)
 
+    # Cross-check each part's own RunInfo against what this run actually
+    # submitted for it (GitHub issue #9 item 3) -- catches a part file that
+    # exists and is DONE but somehow doesn't match (e.g. a macro bug, or a
+    # future change to this script that breaks the seed/offset bookkeeping)
+    # before it gets folded into the merged output.
+    inconsistent = {}
+    for j in jobs:
+        problems = _validate_part(j)
+        if problems:
+            inconsistent[j["index"]] = problems
+    if inconsistent:
+        print(f"\nERROR: {len(inconsistent)} part file(s) failed RunInfo consistency checks, "
+              f"cannot merge:")
+        for idx, problems in inconsistent.items():
+            print(f"  job {idx:3d}: {'; '.join(problems)}")
+        sys.exit(1)
+
     final_path = os.path.join(RESULTS_ROOT_DIR, f"{base_name}_avalanche.root")
     part_paths = [j["part_root_path"] for j in jobs]
-    print(f"\nMerging {len(part_paths)} part files into {final_path} ...")
+    print(f"\nAll {len(part_paths)} parts DONE and RunInfo-consistent. "
+          f"Merging into {final_path} ...")
     subprocess.run(["hadd", "-f", final_path] + part_paths, check=True)
-    print(f"Wrote {final_path} (per-job intermediates kept under {batch_tmp_dir})")
+
+    # Provenance (GitHub issue #9 item 4): which parts, from which run,
+    # under which batch parameters, actually went into this merged file --
+    # appended as its own tree rather than folded into "RunInfo" so it
+    # doesn't collide with (or get overwritten by) the per-part RunInfo
+    # trees export_avalanche_trajectories itself already writes there.
+    with uproot.update(final_path) as f:
+        f["BatchMergeProvenance"] = {
+            "part_index": np.array([j["index"] for j in jobs]),
+            "seed": np.array([j["seed"] for j in jobs]),
+            "event_offset": np.array([j["offset"] for j in jobs]),
+            "n_events": np.array([j["n_events"] for j in jobs]),
+        }
+    print(f"Wrote {final_path} (run_id={run_id}, per-job intermediates kept under {batch_tmp_dir})")
 
 
 if __name__ == "__main__":
