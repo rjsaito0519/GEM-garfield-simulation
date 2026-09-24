@@ -130,7 +130,22 @@ def parse_mesh_names(mesh_names_path: str) -> tuple[dict[str, int], dict[str, in
     return body_ids, boundary_ids
 
 
-_SOLVER_BLOCK = """\
+# ILU2/20000 has been the default since 5cfd9cec (2026-09-23): ILU1/2000
+# failed to converge on the full 3-GEM mesh at high diagnostic voltage
+# multipliers (1.5-3x). But ILU2's incomplete-LU factorization can itself
+# fail outright on a large mesh with a *different* error -- confirmed
+# 2026-09-24 (docs/debugging_notes.md) on a 7x7-tiled, 5.4M-node mesh:
+# "CRS_IncompleteLU: Number of nonzeros larger than HUGE(Integer)" (a
+# 32-bit integer overflow in Elmer's ILU2 implementation, not a
+# convergence problem). Verified ILU1/2000 converges cleanly (48
+# iterations) on that same large mesh at the realistic 1.15x production
+# voltage, so which preconditioner is actually needed depends on both
+# mesh size and voltage regime -- exposed as a CLI override rather than
+# hardcoded, so a large-tiling build isn't stuck picking one over the
+# other project-wide. Default stays ILU2/20000 (unchanged behavior for
+# every existing mesh) unless overridden.
+def _solver_block(preconditioner: str, max_iterations: int) -> str:
+    return f"""\
 Solver 1
   Equation = Stat Elec Solver
   Procedure = "StatElecSolve" "StatElecSolver"
@@ -140,8 +155,8 @@ Solver 1
   Calculate Electric Energy = False
   Linear System Solver = Iterative
   Linear System Iterative Method = CG
-  Linear System Preconditioning = ILU2
-  Linear System Max Iterations = 20000
+  Linear System Preconditioning = {preconditioner}
+  Linear System Max Iterations = {max_iterations}
   Linear System Convergence Tolerance = 1.0e-10
   Steady State Convergence Tolerance = 1.0e-8
 End
@@ -154,6 +169,8 @@ def build_sif_text(
     boundary_ids: dict[str, int],
     body_permittivities: dict[str, float],
     electrode_potentials_v: dict[str, float],
+    preconditioner: str = "ILU2",
+    max_iterations: int = 20000,
 ) -> str:
     """Build the .sif text from whatever bodies/boundaries are present --
     works for the single-GEM model (3 bodies, 4 electrodes) and the 3-GEM
@@ -188,7 +205,7 @@ def build_sif_text(
         )
 
     blocks.append('Equation 1\n  Name = "Electrostatics"\n  Active Solvers(1) = 1\nEnd\n')
-    blocks.append(_SOLVER_BLOCK)
+    blocks.append(_solver_block(preconditioner, max_iterations))
 
     for i, name in enumerate(body_names, start=1):
         # No .get(name, 1.0) fallback here deliberately -- body_permittivities
@@ -218,10 +235,21 @@ def build_sif_text(
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        print("Usage: python3 write_sif.py <mesh_name>  (e.g. single_gem_field, triple_gem_field)")
+    if len(sys.argv) < 2:
+        print("Usage: python3 write_sif.py <mesh_name> [preconditioner] [max_iterations]\n"
+              "  (e.g. single_gem_field, triple_gem_field)\n"
+              "  preconditioner/max_iterations default to ILU2/20000 -- pass ILU1 (and\n"
+              "  optionally a lower max_iterations, e.g. 2000) for a large/finely-tiled\n"
+              "  mesh where ILU2 fails with \"CRS_IncompleteLU: Number of nonzeros larger\n"
+              "  than HUGE(Integer)\" (a 32-bit overflow in Elmer's ILU2, confirmed on a\n"
+              "  7x7-tiled triple_gem_field mesh, 2026-09-24, docs/debugging_notes.md) --\n"
+              "  ILU1 is not guaranteed to converge at extreme diagnostic voltage\n"
+              "  multipliers (see this file's _solver_block comment), but did converge\n"
+              "  cleanly at the realistic 1.15x production voltage on that same mesh.")
         sys.exit(1)
     mesh_name = sys.argv[1]
+    preconditioner = sys.argv[2] if len(sys.argv) > 2 else "ILU2"
+    max_iterations = int(sys.argv[3]) if len(sys.argv) > 3 else 20000
 
     model_info_path = os.path.join(JSON_DIR, f"{mesh_name}_model_info.json")
     with open(model_info_path) as f:
@@ -236,7 +264,8 @@ def main() -> None:
     print(f"Wrote {dielectrics_path}")
 
     sif_text = build_sif_text(
-        mesh_name, body_ids, boundary_ids, body_permittivities, model_info["electrode_potentials_v"]
+        mesh_name, body_ids, boundary_ids, body_permittivities, model_info["electrode_potentials_v"],
+        preconditioner=preconditioner, max_iterations=max_iterations,
     )
     output_path = os.path.join(MESH_DIR, f"{mesh_name}.sif")
     with open(output_path, "w") as f:
