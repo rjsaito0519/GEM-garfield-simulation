@@ -159,7 +159,46 @@ with uproot.open("results/root/triple_gem_field_avalanche.root") as f:
 少数イベント推奨（`view_gem_avalanche_cross_section.cpp`と同じ理由:
 100イベント分の全経路を出すと可視化に使えないほど巨大になる）。
 
-## 5. 関連ドキュメント
+## 5. KEKCC batch (bsub) でのavalanche計算並列化 (`batch/`)
+
+`export_avalanche_trajectories`のavalanche計算はイベント間で状態を共有
+しない（embarrassingly parallel）ため、統計を増やす際（100-200イベント
+規模）はKEKCCのLSF batch (`bsub`)に分割投入した方が速い。`batch/`配下に
+専用の軽量スクリプトを用意した（2026-09-24、GitHub issue #2の議論より）。
+
+- `batch/bsub_utils.py` — `bsub`投入・`bjobs -a`による状態ポーリングの
+  薄いラッパー。ジョブ数が増えても`bjobs`を1回だけ叩いてまとめて状態を
+  引く設計（`~/analyzer/JPARC2025E72/runmanager`のBJobManagerのアイデア
+  を参考にしたが、DST解析固有のrunlistスキーマ等は持ち込んでいない）。
+  投入コマンドは`bash -lc`でログインシェル経由にする
+  （`~/.bashrc`の`$LSB_JOBID`分岐でenvfsの代わりに本来のROOT/condaパスに
+  フォールバックする仕組みに乗るため、ノードローカルのenvfsマウントに
+  依存しない）。
+- `batch/run_avalanche_batch.py` — 総イベント数をN個のジョブに分割し、
+  各ジョブに`export_avalanche_trajectories`の新しい`eventOffset`引数
+  （2026-09-24追加）で重複しないevent番号範囲を割り当てて`bsub`投入、
+  全ジョブ完了を待ってから`hadd`で`results/root/<baseName>_avalanche.root`
+  に結合する。既存の解析スクリプトは(event,track)をglobalに一意な
+  キーとして扱うため、この分割・結合方式でも変更なしにそのまま動く。
+
+```bash
+# まず必ず --dry-run で投入内容を確認する（bsubは一切呼ばれない）
+python3 batch/run_avalanche_batch.py results/mesh/<baseName> resources/ar_ch4_90_10.gas \
+  <n_events_total> <zSensorMin> <zSensorMax> <zInjection> <xHalfCm> <yHalfCm> \
+  [e0_eV] [injectionRadiusCm] [collisionSteps] --njobs 10 --dry-run
+
+# 実際に投入する場合は --dry-run を外す
+python3 batch/run_avalanche_batch.py ... --njobs 10 --queue s
+```
+
+各ジョブの中間ファイル・bsubログは`results/root/.batch_tmp/<baseName>/partNNN/`
+に残る（デバッグ用、自動削除しない）。**注意**: バッチジョブ投入
+（`bsub`実行）はプロジェクトの安全ルール上、ユーザーが明示的にその場で
+依頼したときのみ行う（`--dry-run`なしでの実行は自動では行わない）。
+Elmer solve自体（MPI分割等）はこの枠組みの対象外 — 単一の線形システムを
+解く工程であり、avalanche計算のような単純な並列分割ができないため。
+
+## 6. 関連ドキュメント
 
 - `README.md` — プロジェクト概要、対象デバイス、実行環境
 - `docs/debugging_notes.md` — GEM1→GEM2電子透過率問題の調査ログ（issue #2）

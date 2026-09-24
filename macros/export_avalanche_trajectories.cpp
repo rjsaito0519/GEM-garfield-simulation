@@ -21,12 +21,20 @@
  * Usage: export_avalanche_trajectories <mesh/result dir> <.gas file>
  *          <n events> <zSensorMin> <zSensorMax> <zInjection> <xHalfCm>
  *          <yHalfCm> [e0_eV] [injectionRadiusCm] [output dir] [collisionSteps]
+ *          [eventOffset]
  *   Same argument convention as gem_avalanche.cpp -- the numbers already
  *   used for a given model's gem_avalanche run can be reused here directly.
  *   collisionSteps: real collisions between recorded path points, default
  *     100. Set to 1 to record every single real collision (much bigger
  *     output, but shows the true per-collision step size -- e.g. near a
  *     hole wall, see docs/debugging_notes.md).
+ *   eventOffset: added to every "event" branch value (default 0). Lets
+ *     several parallel runs (e.g. LSF/bsub jobs, see batch/run_avalanche_batch.py
+ *     and docs/pipeline_gotchas.md) each cover a distinct, non-overlapping
+ *     slice of a larger total event count, so their "Trajectories" trees
+ *     can be hadd'd together afterward without colliding (event,track)
+ *     keys -- every downstream analysis script treats (event,track) as a
+ *     globally unique identifier.
  *
  * Output: "<baseName>_avalanche.root", tree "Trajectories", branches
  *   event,track,x,y,z,t,energy,status
@@ -86,6 +94,7 @@ int main(int argc, char* argv[]) {
   // directly near a hole wall, independent of any macroscopic-transport-
   // table question -- see docs/debugging_notes.md.
   const int collisionSteps = argc > 12 ? std::atoi(argv[12]) : 100;
+  const int eventOffset = argc > 13 ? std::atoi(argv[13]) : 0;
 
   MediumMagboltz gas;
   if (!gas.LoadGasFile(gasFile)) {
@@ -152,14 +161,15 @@ int main(int argc, char* argv[]) {
     for (std::size_t track = 0; track < electrons.size(); ++track) {
       b_status = electrons[track].status;
       for (const auto& p : electrons[track].path) {
-        b_event = i;
+        b_event = i + eventOffset;
         b_track = track;
         b_x = p.x; b_y = p.y; b_z = p.z; b_t = p.t; b_energy = p.energy;
         trajectoriesTree.Fill();
         ++nPoints;
       }
     }
-    std::cout << "Event " << i << "/" << nEvents << ": " << electrons.size()
+    std::cout << "Event " << i << "/" << nEvents << " (global event "
+               << (i + eventOffset) << "): " << electrons.size()
                << " electron tracks, " << nPoints << " trajectory points\n";
   }
   trajectoriesTree.Write();
