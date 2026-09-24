@@ -18,7 +18,10 @@ gap at all", cross-checked against the r_birth-binned extraction rate
 already established for the full stack.
 
 Usage:
-    python3 analyze_single_gem_plane_crossings.py <avalanche.root>
+    python3 analyze_single_gem_plane_crossings.py <avalanche.root> [gem_type: 100|50]
+    gem_type selects the GEM foil thickness whose z-bounds to use (default
+    100, i.e. GEM1's type); pass 50 when analyzing a GEM2/GEM3-type
+    (single_gem_field, GEM_50UM) standalone run.
 """
 
 import sys
@@ -27,13 +30,20 @@ import numpy as np
 import uproot
 
 from analyze_plane_crossings import _crossed, _interpolated_xy_at_plane, _status_name
-from gem_params import GEM_100UM
+from gem_params import GEM_50UM, GEM_100UM
 
 # Single-GEM foil z-boundaries (see single_gem_field_model.py:
-# z_gem_top/z_gem_bottom, GEM centered at z=0).
-_HALF_T_DIEL_CM = GEM_100UM.dielectric_thickness_cm / 2.0
-Z_GEM_TOP = _HALF_T_DIEL_CM + GEM_100UM.copper_thickness_cm
-Z_GEM_BOTTOM = -Z_GEM_TOP
+# z_gem_top/z_gem_bottom, GEM centered at z=0). Which GEM type's thickness
+# to use is a CLI arg (default 100um, i.e. GEM1's type) since this script
+# is also used for the 50um GEM2/GEM3 type -- see docs/debugging_notes.md.
+_GEM_PARAMS_BY_TYPE = {"100": GEM_100UM, "50": GEM_50UM}
+
+
+def _gem_z_bounds(gem_type: str) -> tuple[float, float]:
+    params = _GEM_PARAMS_BY_TYPE[gem_type]
+    half_t_diel_cm = params.dielectric_thickness_cm / 2.0
+    z_top = half_t_diel_cm + params.copper_thickness_cm
+    return z_top, -z_top
 
 # Transfer-gap diagnostic planes: fractions of the way from GEM bottom to
 # the sensor's transfer-side boundary (SingleGemTestConfig.transfer_gap_cm
@@ -44,23 +54,25 @@ _TRANSFER_GAP_CM = 0.20
 _TRANSFER_FRACTIONS = [0.10, 0.25, 0.50, 0.75, 0.90]
 
 
-def _birth_region(z_val: float) -> str:
-    if z_val > Z_GEM_TOP:
+def _birth_region(z_val: float, z_gem_top: float, z_gem_bottom: float) -> str:
+    if z_val > z_gem_top:
         return "drift (above GEM)"
-    if z_val >= Z_GEM_BOTTOM:
+    if z_val >= z_gem_bottom:
         return "GEM"
     return "transfer gap"
 
 
 def main() -> None:
     if len(sys.argv) < 2:
-        print("Usage: analyze_single_gem_plane_crossings.py <avalanche.root>")
+        print("Usage: analyze_single_gem_plane_crossings.py <avalanche.root> [gem_type: 100|50]")
         sys.exit(1)
     root_path = sys.argv[1]
+    gem_type = sys.argv[2] if len(sys.argv) > 2 else "100"
+    z_gem_top, z_gem_bottom = _gem_z_bounds(gem_type)
 
-    planes = [("GEM top", Z_GEM_TOP), ("GEM bottom", Z_GEM_BOTTOM)]
+    planes = [("GEM top", z_gem_top), ("GEM bottom", z_gem_bottom)]
     for frac in _TRANSFER_FRACTIONS:
-        planes.append((f"transfer {int(frac * 100)}%", Z_GEM_BOTTOM - frac * _TRANSFER_GAP_CM))
+        planes.append((f"transfer {int(frac * 100)}%", z_gem_bottom - frac * _TRANSFER_GAP_CM))
 
     with uproot.open(root_path) as f:
         tree = f["Trajectories"]
@@ -83,7 +95,7 @@ def main() -> None:
     for ev, tr in keys:
         m = (event == ev) & (track == tr)
         track_masks[(ev, tr)] = m
-        label = _birth_region(z[m][0])
+        label = _birth_region(z[m][0], z_gem_top, z_gem_bottom)
         birth_counts[label] = birth_counts.get(label, 0) + 1
     print("Birth region (first recorded point of each track):")
     for label in ("drift (above GEM)", "GEM", "transfer gap"):
@@ -132,7 +144,7 @@ def main() -> None:
             last = idx[-1]
             st = int(status[last])
             z_last = z[last]
-            region = _birth_region(z_last)
+            region = _birth_region(z_last, z_gem_top, z_gem_bottom)
             fate = f"{_status_name(st)} in {region}"
             fate_counts[fate] = fate_counts.get(fate, 0) + 1
         for fate, c in sorted(fate_counts.items(), key=lambda kv: -kv[1]):
