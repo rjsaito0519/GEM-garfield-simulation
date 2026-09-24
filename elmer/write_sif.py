@@ -31,6 +31,41 @@ MESH_DIR = os.path.join(REPO_ROOT, "results", "mesh")
 JSON_DIR = os.path.join(REPO_ROOT, "results", "json")
 
 
+# Body names allowed to silently get relative permittivity 1.0 -- must stay
+# an explicit, deliberate allowlist (physically, only vacuum/gas has
+# epsilon_r == 1 by definition), never a fallback default. See
+# resolve_body_permittivities() and GitHub issue #6 item 4: an unrecognized
+# material name silently defaulting to epsilon_r = 1 would be a silent
+# physics bug once Glass/Glue/coating materials get added.
+_VACUUM_LIKE_BODY_NAMES = {"Gas"}
+
+
+def resolve_body_permittivities(body_ids: dict[str, int], model_info: dict) -> dict[str, float]:
+    """Map every body name mesh.names actually defines (for this mesh_name)
+    to a relative permittivity, erroring on anything not explicitly known
+    instead of silently defaulting to 1.0 (GitHub issue #6 item 4)."""
+    known = {
+        "Dielectric": model_info["dielectric_relative_permittivity"],
+        "Copper": model_info["copper_relative_permittivity"],
+    }
+    result: dict[str, float] = {}
+    for name in body_ids:
+        if name in _VACUUM_LIKE_BODY_NAMES:
+            result[name] = 1.0
+        elif name in known:
+            result[name] = known[name]
+        else:
+            raise ValueError(
+                f"Unknown dielectric material body {name!r} (body ID {body_ids[name]}) -- "
+                "no relative permittivity defined for it. Add it explicitly to "
+                "write_sif.py's resolve_body_permittivities() (or to "
+                "_VACUUM_LIKE_BODY_NAMES if it is genuinely vacuum/gas with epsilon_r "
+                "== 1) instead of letting it silently default to 1.0 -- see GitHub "
+                "issue #6 item 4."
+            )
+    return result
+
+
 def write_dielectrics_dat(
     body_ids: dict[str, int], body_permittivities: dict[str, float], output_path: str
 ) -> None:
@@ -49,12 +84,22 @@ def write_dielectrics_dat(
     NOT body ID i. Any code elsewhere that also references a material by
     index (e.g. ComponentElmer::SetMedium/DriftMedium in the macros under
     macros/) must use this same body-ID-minus-1 convention.
+
+    body_permittivities must already cover every name in body_ids (see
+    resolve_body_permittivities) -- a gap here (a body ID with no assigned
+    permittivity) is a real bug, so it errors instead of silently leaving
+    that slot at some default value.
     """
     max_id = max(body_ids.values())
-    permittivity_by_slot = [1.0] * max_id
+    permittivity_by_slot: list[float | None] = [None] * max_id
     for name, body_id in body_ids.items():
-        if name in body_permittivities:
-            permittivity_by_slot[body_id - 1] = body_permittivities[name]
+        permittivity_by_slot[body_id - 1] = body_permittivities[name]
+    missing_slots = [slot for slot, eps in enumerate(permittivity_by_slot) if eps is None]
+    if missing_slots:
+        raise ValueError(
+            f"dielectrics.dat slot(s) {missing_slots} (body ID(s) {[s + 1 for s in missing_slots]}) "
+            f"have no permittivity assigned -- body_ids has a gap: {body_ids}"
+        )
 
     with open(output_path, "w") as f:
         f.write(f"{len(permittivity_by_slot)}\n")
@@ -146,7 +191,11 @@ def build_sif_text(
     blocks.append(_SOLVER_BLOCK)
 
     for i, name in enumerate(body_names, start=1):
-        eps = body_permittivities.get(name, 1.0)
+        # No .get(name, 1.0) fallback here deliberately -- body_permittivities
+        # must already cover every body name (resolve_body_permittivities
+        # errors otherwise), so a missing key here is a real bug, not a case
+        # to paper over (GitHub issue #6 item 4).
+        eps = body_permittivities[name]
         blocks.append(f'Material {i}\n  Name = "{name}"\n  Relative Permittivity = {eps}\nEnd\n')
 
     # Boundaries: only the ones with a defined potential are real
@@ -182,11 +231,7 @@ def main() -> None:
     body_ids, boundary_ids = parse_mesh_names(mesh_names_path)
 
     dielectrics_path = os.path.join(MESH_DIR, mesh_name, "dielectrics.dat")
-    body_permittivities = {
-        "Gas": 1.0,
-        "Dielectric": model_info["dielectric_relative_permittivity"],
-        "Copper": model_info["copper_relative_permittivity"],
-    }
+    body_permittivities = resolve_body_permittivities(body_ids, model_info)
     write_dielectrics_dat(body_ids, body_permittivities, dielectrics_path)
     print(f"Wrote {dielectrics_path}")
 
