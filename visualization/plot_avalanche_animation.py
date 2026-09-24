@@ -23,9 +23,17 @@ recorded time as a birth/death event and a proper step function -- not a
 monotonic "ever created" count, which would hide how many are lost.
 
 Usage:
-    python3 plot_avalanche_animation.py <avalanche.root> <event> [label]
+    python3 plot_avalanche_animation.py <avalanche.root> <event> [label] [--readme-demo]
     label: text shown in the title (e.g. "1.15x voltage"); defaults to the
     root file's base name.
+    --readme-demo: also copy the rendered GIF to results/img/avalanche_demo.gif
+    -- the fixed filename README.md embeds on GitHub's repo front page (2026-09-25).
+    That filename deliberately never changes so a better event found later can
+    just be re-rendered with this flag to replace it in place, without touching
+    README.md at all. This is the *only* GIF this project tracks in git (see
+    .gitignore) -- every other rendered animation, including the plain
+    <baseName>_event<N>_avalanche.gif this script always writes, stays untracked
+    like the rest of results/.
 Output: results/img/<baseName>_event<N>_avalanche.gif -- one combined
     animation, oblique and true side-on (elev=0) 3D panels side by side
     sharing one electron-count panel below (2026-09-25: previously two
@@ -33,6 +41,7 @@ Output: results/img/<baseName>_event<N>_avalanche.gif -- one combined
 """
 
 import os
+import shutil
 import sys
 
 import matplotlib
@@ -246,20 +255,27 @@ def render(out_path: str, x, y, z, t, alive_times, alive_cum,
 
 
 def main() -> None:
-    if len(sys.argv) < 3:
-        print("Usage: plot_avalanche_animation.py <avalanche.root> <event> [label]")
+    args = [a for a in sys.argv[1:] if a != "--readme-demo"]
+    set_as_readme_demo = "--readme-demo" in sys.argv[1:]
+    if len(args) < 2:
+        print("Usage: plot_avalanche_animation.py <avalanche.root> <event> [label] [--readme-demo]")
         sys.exit(1)
-    root_path = sys.argv[1]
-    event = int(sys.argv[2])
+    root_path = args[0]
+    event = int(args[1])
     base_name = os.path.splitext(os.path.basename(root_path))[0].removesuffix("_avalanche")
-    label = sys.argv[3] if len(sys.argv) > 3 else base_name
+    label = args[2] if len(args) > 2 else base_name
 
     os.makedirs(IMG_DIR, exist_ok=True)
     x, y, z, t, track = _load_event(root_path, event)
     alive_times, alive_cum = _birth_death_step(t, track)
 
-    render(os.path.join(IMG_DIR, f"{base_name}_event{event}_avalanche.gif"),
-           x, y, z, t, alive_times, alive_cum, label)
+    out_path = os.path.join(IMG_DIR, f"{base_name}_event{event}_avalanche.gif")
+    render(out_path, x, y, z, t, alive_times, alive_cum, label)
+
+    if set_as_readme_demo:
+        demo_path = os.path.join(IMG_DIR, "avalanche_demo.gif")
+        shutil.copyfile(out_path, demo_path)
+        print(f"--readme-demo: copied to {demo_path} (README.md's tracked front-page GIF)")
 
 
 if __name__ == "__main__":

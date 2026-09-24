@@ -5,6 +5,15 @@ J-PARC E72 (HypTPC) の3段GEM電場・電子雪崩シミュレーション。
 `GEM_Garfield` (https://github.com/hyptpc/GEM_Garfield) の設計思想（パラメータ駆動でGmsh/Elmer入力を生成する）を
 参考にしつつ、独立に作り直したもの。
 
+![電子雪崩アニメーション](results/img/avalanche_demo.gif)
+
+上: 1イベント分の電子雪崩が3段GEMスタックを通過していく様子（斜め視点・
+真横断面を並べて表示、下段に瞬間瞬間の電子数）。`visualization/plot_avalanche_animation.py`
+で生成（再現・差し替え手順は同スクリプトのdocstring参照）。表示している
+イベントは今後より良いものに差し替える可能性があるため、ファイル名は
+`results/img/avalanche_demo.gif`に固定してある（中身だけ更新すればこの
+埋め込み自体は変更不要）。
+
 ## 対象デバイス
 
 HypTPC (J-PARC E42/E45/E72共通) の3段GEMスタック。
