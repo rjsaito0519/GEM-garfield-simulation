@@ -140,6 +140,15 @@ int main(int argc, char* argv[]) {
     std::cerr << "Failed to load gas file " << gasFile << "\n";
     return 1;
   }
+  // Penning transfer is a runtime-only MediumGas property, not persisted in
+  // .gas files -- see gem_avalanche.cpp's comment on the same call for the
+  // full explanation and the literature source for this gas mixture's
+  // parameters (GitHub issue #7 item 3).
+  const bool penningEnabled = gas.EnablePenningTransfer();
+  if (!penningEnabled) {
+    std::cerr << "WARNING: EnablePenningTransfer() failed for this gas "
+                 "composition -- proceeding without Penning transfer.\n";
+  }
 
   // geo.gas_material_index is read from the actual "Gas" physical group ID
   // the geometry builder wrote (model_info.hh), not hardcoded -- see that
@@ -196,11 +205,11 @@ int main(int argc, char* argv[]) {
   const double t0 = 0.;
   int nEventsAtCap = 0;
   for (int i = 0; i < nEvents; ++i) {
-    // Same injection convention as gem_avalanche.cpp: small random offset
-    // around the hole axis, direction (0,0,-1) (downstream). r = R*U is
-    // deliberately not uniform-in-area -- see gem_avalanche.cpp's comment
-    // on the same pattern (GitHub issue #5 item 5) for why.
-    const double r = injectionRadiusCm * RndmUniform();
+    // Same injection convention as gem_avalanche.cpp: direction (0,0,-1)
+    // (downstream), r = R*sqrt(U) for genuine uniform-in-area sampling on
+    // the injection disk -- see gem_avalanche.cpp's comment on the same
+    // pattern (GitHub issue #5 item 5, fixed 2026-09-24) for why.
+    const double r = injectionRadiusCm * std::sqrt(RndmUniform());
     const double phi = 2. * M_PI * RndmUniform();
     const double x0 = r * std::cos(phi);
     const double y0 = r * std::sin(phi);
@@ -239,6 +248,7 @@ int main(int argc, char* argv[]) {
       {"gas_temperature_k", std::to_string(gas.GetTemperature())},
       {"gas_pressure_torr", std::to_string(gas.GetPressure())},
       {"gas_material_index", std::to_string(geo.gas_material_index)},
+      {"penning_transfer_enabled", penningEnabled ? "true" : "false"},
       {"n_events", std::to_string(nEvents)},
       {"event_offset", std::to_string(eventOffset)},
       {"collision_steps", std::to_string(collisionSteps)},

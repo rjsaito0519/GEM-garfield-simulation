@@ -1158,6 +1158,39 @@ baseline(1.0x)・150イベントでの結論（「GEM2完全通過28件、GEM3�
 conditionとして初めてgenuine plane-crossing解析を実行し、値を記録した」
 という事実のみを残す。
 
+## 2026-09-24: Penning transferを有効化（GitHub issue #7 item 3）、r=R*sqrt(U)の一様面積サンプリングに修正（issue #5 item 5）
+
+issue #7 item 3の調査で、`resources/ar_ch4_90_10.gas`はPenning transferの
+パラメータを一切含んでいないことを確認した（Garfield++ソース
+`MediumGas::WriteGasFile`/`LoadGasFile`を直接確認: Penning transferは
+`MediumGas`オブジェクトのruntime-onlyな属性で、`.gas`ファイルには保存
+されない）。そのため`gem_avalanche.cpp`/`export_avalanche_trajectories.cpp`
+のどちらも`EnablePenningTransfer()`を呼んでおらず、**これまでの全gain結果
+（1.15x productionを含む）はPenningなしで計算されていた**。
+
+Garfield++ソース(`MediumGas::EnablePenningTransfer()`)には我々の
+Ar/CH4(90/10, 1atm)混合比にそのまま適用できる文献値の内蔵パラメータ
+（doi:10.1088/1748-0221/5/05/P05002ベース）がある。ユーザーに確認の上、
+両avalancheマクロに`gas.EnablePenningTransfer()`（引数なし、上記の内蔵
+パラメータを使う版）を追加した。実行時ログで実際の値を確認:
+`Penning transfer probability for 44 Ar excitation levels set to r = 0.221765`
+（手計算での期待値 rP≈0.222 と一致、λ=0）。`RunInfo` treeに
+`penning_transfer_enabled`キーとして記録される。
+
+同時に、issue #5 item 5で以前から既知だった`r = injectionRadiusCm *
+RndmUniform()`（円盤上で一様面積分布ではなく中心寄りに偏る）を
+`r = injectionRadiusCm * std::sqrt(RndmUniform())`に修正した（ユーザー
+承認、issue #7 item 5の"標準efficiency出力"がGEM上方の広い領域からの
+genuine collection efficiencyを測るには一様面積サンプリングが必須のため）。
+
+**重要: この2つの変更はどちらも物理的な結果を変える。** 既存の
+production条件（`triple_gem_field_v1.15x_n5`、GEM1=90.6x/GEM2=11.5x/
+GEM3=11.7x等、上記の各節に記録した値）はすべてPenning無し・旧
+injection分布で計算されたものなので、**この変更後に再計算するまでは
+最新の値ではない**。次のステップ: production条件の電子雪崩を
+Penning有効・修正済みinjectionで再実行し、gain/funnel解析を更新する
+（issue #7の一部として進行中）。
+
 ## パイプライン構築時に踏んだ落とし穴（Gmsh → Elmer → Garfield++）
 
 こちらは物理の問題ではなく、素朴にハマったバグ・仕様。同種の変更をする際は再確認。

@@ -147,6 +147,24 @@ int main(int argc, char* argv[]) {
   if (maxElectronEnergyEv > 0.) {
     gas.SetMaxElectronEnergy(maxElectronEnergyEv);
   }
+  // Penning transfer is NOT part of what .gas files persist (confirmed in
+  // the installed Garfield++ source, MediumGas::WriteGasFile/LoadGasFile --
+  // it's a runtime-only property of the MediumGas object), so every macro
+  // that runs an avalanche must (re-)enable it itself, same as every other
+  // LoadGasFile() call. The no-arg overload uses Garfield's own built-in,
+  // literature-sourced parameterization for this exact Ar/CH4 mixture at
+  // our pressure (doi:10.1088/1748-0221/5/05/P05002; confirmed in source,
+  // MediumGas::EnablePenningTransfer(), gives r~0.222, lambda=0 for 90/10
+  // Ar/CH4 at 1 atm) rather than an arbitrary guess. Enabled 2026-09-24
+  // (GitHub issue #7 item 3) after confirming no prior gain result
+  // (including the production 1.15x-voltage config) included it --
+  // absolute gain numbers from before this change are not directly
+  // comparable to ones from after it.
+  const bool penningEnabled = gas.EnablePenningTransfer();
+  if (!penningEnabled) {
+    std::cerr << "WARNING: EnablePenningTransfer() failed for this gas "
+                 "composition -- proceeding without Penning transfer.\n";
+  }
 
   // geo.gas_material_index is read from the actual "Gas" physical group ID
   // the geometry builder wrote (model_info.hh), not hardcoded -- see that
@@ -212,21 +230,19 @@ int main(int argc, char* argv[]) {
   gains.reserve(nEvents);
   int nEventsAtCap = 0;
   for (int i = 0; i < nEvents; ++i) {
-    // Small random offset around the hole axis, matching the now-deleted
-    // prototype's convention (test/gem_simulation/gem_avalanche.C).
-    // NOTE (GitHub issue #5 item 5): r = R*U is NOT uniform-in-area on the
-    // disk (that would be r = R*sqrt(U)) -- it's biased toward the center.
-    // Left as-is deliberately: injectionRadiusCm is tiny (a few um to a few
-    // tens of um) purely to seed electrons very close to the hole axis for
-    // this diagnostic near-axis injection, not to model any physically
-    // realistic entry-position distribution -- see also the injection
-    // *direction* comment below (also intentionally simplified, not meant
-    // to reproduce a real post-drift-diffusion angular distribution). If a
-    // future study needs genuine uniform-area sampling (e.g. to compare
-    // against a wider, physically-motivated entry distribution), change
-    // this to r = injectionRadiusCm * std::sqrt(RndmUniform()) -- discuss
-    // first, this changes simulation results.
-    const double r = injectionRadiusCm * RndmUniform();
+    // Uniform-in-area sampling on the injection disk (r = R*sqrt(U), not
+    // r = R*U -- the latter is biased toward the center, see GitHub issue
+    // #5 item 5). Fixed 2026-09-24 with the user's explicit approval
+    // (issue #7 item 5 needs genuine collection-efficiency measurement,
+    // which requires a real upstream-area sampling, not the old near-axis-
+    // biased distribution the R*U formula gave); before this fix,
+    // injectionRadiusCm was kept tiny specifically to approximate
+    // near-axis injection despite the bias, so any result using a wider
+    // injectionRadiusCm together with the R*U formula would have been
+    // wrong. See also the injection *direction* comment below (still
+    // intentionally simplified, not meant to reproduce a real post-drift-
+    // diffusion angular distribution).
+    const double r = injectionRadiusCm * std::sqrt(RndmUniform());
     const double phi = 2. * M_PI * RndmUniform();
     const double x0 = r * std::cos(phi);
     const double y0 = r * std::sin(phi);
@@ -280,6 +296,7 @@ int main(int argc, char* argv[]) {
       {"gas_temperature_k", std::to_string(gas.GetTemperature())},
       {"gas_pressure_torr", std::to_string(gas.GetPressure())},
       {"gas_material_index", std::to_string(geo.gas_material_index)},
+      {"penning_transfer_enabled", penningEnabled ? "true" : "false"},
       {"n_events", std::to_string(nEvents)},
       {"z_sensor_min_cm", std::to_string(zSensorMin)},
       {"z_sensor_max_cm", std::to_string(zSensorMax)},
