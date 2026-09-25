@@ -128,9 +128,6 @@ docs/           詳細ドキュメント（下記「ドキュメント」参照�
   （診断目的、実機のdrift/diffusion後の分布を再現するものではない）
 - **avalanche size limit convergence**: 各sweep点10-20イベントの小統計に
   基づく判断であり、厳密な収束証明ではない
-- **現行のproduction avalancheデータ**: `triple_gem_field_v1.15x_n7_avalanche.root`
-  自体はavalanche_size_limit=2000で生成されたまま（20000での再生成待ち、
-  [issue #14](https://github.com/rjsaito0519/GEM-garfield-simulation/issues/14)）
 - **Periodic boundary condition**: 未実装（現状は有限タイルでの近似、[issue #15](https://github.com/rjsaito0519/GEM-garfield-simulation/issues/15)）
 - **誘電体近似**: dielectric layerは比誘電率のみでモデル化（詳細構造は簡略化）
 
@@ -141,8 +138,7 @@ docs/           詳細ドキュメント（下記「ドキュメント」参照�
 - `docs/debugging_notes.md` — 開発中の調査ログ・仮説検証の記録（日付順）
 - `docs/pipeline_gotchas.md` — Gmsh/Elmer/Garfield++/ROOT/Python連携で踏んだ落とし穴集
 - `CLAUDE.md` — AIエージェント向けエントリポイント
-- 関連する主な GitHub Issues: [#14](https://github.com/rjsaito0519/GEM-garfield-simulation/issues/14) (avalanche_size_limit再生成待ち)、
-  [#15](https://github.com/rjsaito0519/GEM-garfield-simulation/issues/15) (periodic boundary・voltage scan・文献比較)、[#13](https://github.com/rjsaito0519/GEM-garfield-simulation/issues/13) (本README再構成)
+- 関連する主な GitHub Issues: [#15](https://github.com/rjsaito0519/GEM-garfield-simulation/issues/15) (periodic boundary・voltage scan・文献比較、今後の作業)
 
 ## 実行環境
 

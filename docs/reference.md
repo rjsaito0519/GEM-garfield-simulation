@@ -148,26 +148,40 @@ limit到達割合は5000以上で0%に落ち、GEM1-extracted cohortの各funnel
 **ただし各点10-20イベントと統計が小さく、厳密な収束証明ではなく「傾向として
 問題なし」という判断である点に注意。**
 
-**注意: 上の§2.5にある現行の`triple_gem_field_v1.15x_n7_avalanche.root`
-自体は、この収束確認および`avalanche_size_limit`のCLI引数化(issue #9 item 4)
-より前に生成されたファイルで、デフォルトの`avalanche_size_limit=2000`
-のまま（50イベント中28イベントが上限到達、README.md「現在のproduction
-condition」参照）。上の結論を反映するには`--avalanche-size-limit 20000`
-を付けてn7を再生成する必要があるが、それには新規bsub投入の承認が要るため
-未実施 -- ユーザー判断待ち。
+**2026-09-25/26解消 (issue #14): `triple_gem_field_v1.15x_n7_avalanche.root`を
+`--avalanche-size-limit 20000`で再生成済み。** 50イベント中limit到達は1件のみ
+（旧`avalanche_size_limit=2000`では28件だった）。再生成の過程で2つの実バグを
+発見・修正:
+
+- queue "s"(150分CPU上限)では、limitが緩んだ分イベント処理が長引き
+  10ジョブ中7ジョブがTERM_CPULIMITで失敗 -- 9x9バッチと同じ原因。queue "l"
+  (1200分)へ`--retry-indices`で再投入して解決。
+- 一部partファイル(特にサイズの大きいもの)がROOTのTTree autosaveで
+  複数cycleを持つ状態になり、`uproot`で読めなくなる
+  (`ValueError: read length must be non-negative or -1`、ROOT自体/`hadd`は
+  問題なく読める)不具合を発見。`export_avalanche_trajectories.cpp`/
+  `gem_avalanche.cpp`で`SetAutoSave(0)`を設定し、1 runにつき1 cycleのみに
+  することで解消（該当partは`hadd`で1cycle化して復旧、entry数が一致することを
+  確認済み）。
+- `--resume-run-id`利用時に`--base-seed`を明示しないと再試行のたびに
+  異なるseedが使われ、`_validate_part`のrng_seed厳密一致チェックが
+  誤って失敗することが判明。rng_seedの妥当性チェックのみに緩和
+  （offset/n_events/avalanche_size_limit/geometry_typeのチェックは維持）。
 
 **2026-09-25解消: issue #12 item 3 (7x7 vs 9x9 finite geometry
 convergence)。** `triple_gem_field_v1.15x_n9`(9x9、50イベント、
 avalanche_size_limit=20000)を`triple_gem_field_v1.15x_n7`(7x7、50イベント)
-と`analyze_plane_crossings.py`で比較:
+と`analyze_plane_crossings.py`で比較（2026-09-26、n7がissue #14で
+avalanche_size_limit=20000に再生成された後の数値に更新、両者とも
+同じlimitでの比較になった）:
 
-| 指標 (GEM1-extracted cohort比) | 7x7 | 9x9 |
+| 指標 (GEM1-extracted cohort比) | 7x7 (limit=20000) | 9x9 (limit=20000) |
 |---|---|---|
-| T1 25%→75%の低下 | 40.8%→38.9% | 41.1%→40.9% |
-| GEM2 hole entrance | 14.7% | 16.1% |
-| GEM2 bottom | 3.1% | 2.8% |
-| GEM3 top | 0.4% | 0.4% |
-| GEM3 bottom | 0.1% (6/7368) | 0.1% (10/10309) |
+| T1 25%→75%の低下 | 41.1%→39.2% | 41.1%→40.9% |
+| GEM2 hole entrance | 15.3% | 16.1% |
+| GEM2 bottom | 2.7% | 2.8% |
+| GEM3 top | 0.3% | 0.4% |
+| GEM3 bottom | 0.1% (5/8615) | 0.1% (10/10309) |
 | 最終fateでの"StatusLeftDriftArea"(ラテラル脱出) | 0件 | 0件 |
 
 GEM2以降の各比率は統計誤差内で一致し、両方とも最終fateにラテラル脱出が
