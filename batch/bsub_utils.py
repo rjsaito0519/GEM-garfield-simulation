@@ -37,7 +37,7 @@ _TERMINAL_STATES = {"DONE", "EXIT"}
 _LSF_LOG_STATUS_RE = re.compile(r"in cluster <[^>]*> (Done|Exit)")
 
 
-def _status_from_log(log_path: str) -> str | None:
+def status_from_log(log_path: str) -> str | None:
     """Final status ("DONE"/"EXIT") read from a job's own LSF -o log
     header, or None if the header isn't there yet (job not actually
     finished) or the log doesn't exist. Unlike `bjobs -a`, a local log file
@@ -155,9 +155,9 @@ class BJobStatusCache:
         """Status string (PEND/RUN/DONE/EXIT/...). If bjobs -a no longer
         reports this job at all (aged out of LSF's recently-finished-job
         history) and log_path is given, falls back to that job's own LSF
-        log header (see _status_from_log) to resolve it to DONE/EXIT
+        log header (see status_from_log) to resolve it to DONE/EXIT
         instead of leaving it as an ambiguous 'UNKNOWN' -- see
-        _status_from_log's docstring for why this fallback exists. Only
+        status_from_log's docstring for why this fallback exists. Only
         genuinely still-running-or-truly-untraceable jobs (no log header
         yet, or no log_path given) come back as 'UNKNOWN'.
         """
@@ -165,7 +165,7 @@ class BJobStatusCache:
         if status is not None:
             return status
         if log_path is not None:
-            log_status = _status_from_log(log_path)
+            log_status = status_from_log(log_path)
             if log_status is not None:
                 return log_status
         return "UNKNOWN"

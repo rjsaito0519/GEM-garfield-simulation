@@ -182,6 +182,25 @@ def main() -> None:
         "--dry-run", action="store_true",
         help="Print what would be submitted/merged; never call bsub or touch the LSF queue.",
     )
+    parser.add_argument(
+        "--resume-run-id", default=None,
+        help="Reuse an existing run_id's part directory instead of a fresh timestamp -- "
+             "for retrying only some parts of a batch that already has a run_id (see "
+             "--retry-indices) instead of resubmitting everything with a new one. All "
+             "other arguments must match the original invocation exactly (same seeds/"
+             "offsets are derived from them), or the RunInfo consistency check will "
+             "correctly reject the mismatched parts at merge time.",
+    )
+    parser.add_argument(
+        "--retry-indices", default=None,
+        help="Comma-separated job indices (0-based) to actually (re)submit via bsub; "
+             "requires --resume-run-id. Every other index is assumed already complete "
+             "under that run_id and its final status is read directly from its existing "
+             "bsub.log instead of being resubmitted -- for recovering a batch where some "
+             "jobs genuinely failed (e.g. TERM_CPULIMIT on a queue too small for a few "
+             "heavy events, GitHub issue #12 item 3, 2026-09-25) while most parts already "
+             "finished successfully, without re-running or re-paying for the good ones.",
+    )
     args = parser.parse_args()
 
     # Explicit, loud validation up front (GitHub issue #9) -- argparse's
@@ -192,6 +211,14 @@ def main() -> None:
         parser.error(f"--njobs must be > 0, got {args.njobs}")
     if args.n_events_total <= 0:
         parser.error(f"n_events_total must be > 0, got {args.n_events_total}")
+    if args.retry_indices is not None and args.resume_run_id is None:
+        parser.error("--retry-indices requires --resume-run-id")
+    retry_indices = None
+    if args.retry_indices is not None:
+        try:
+            retry_indices = {int(x) for x in args.retry_indices.split(",") if x.strip()}
+        except ValueError:
+            parser.error(f"--retry-indices: not a comma-separated list of ints: {args.retry_indices!r}")
 
     if not os.path.isfile(MACRO_BINARY):
         parser.error(f"Binary not found: {MACRO_BINARY} (build it first, see docs/reference.md)")
@@ -218,11 +245,18 @@ def main() -> None:
     # not used). A fresh timestamped subdirectory per invocation means a
     # failed run can never contaminate a later one, and nothing here is
     # ever silently reused across runs.
-    run_id = time.strftime("%Y%m%dT%H%M%S")
-    batch_tmp_dir = os.path.join(RESULTS_ROOT_DIR, ".batch_tmp", base_name, run_id)
-    if not args.dry_run:
-        os.makedirs(batch_tmp_dir, exist_ok=True)
-    print(f"run_id={run_id} (part directory: {batch_tmp_dir})")
+    if args.resume_run_id is not None:
+        run_id = args.resume_run_id
+        batch_tmp_dir = os.path.join(RESULTS_ROOT_DIR, ".batch_tmp", base_name, run_id)
+        if not os.path.isdir(batch_tmp_dir):
+            parser.error(f"--resume-run-id {run_id}: no such directory {batch_tmp_dir}")
+        print(f"run_id={run_id} (RESUMED, part directory: {batch_tmp_dir})")
+    else:
+        run_id = time.strftime("%Y%m%dT%H%M%S")
+        batch_tmp_dir = os.path.join(RESULTS_ROOT_DIR, ".batch_tmp", base_name, run_id)
+        if not args.dry_run:
+            os.makedirs(batch_tmp_dir, exist_ok=True)
+        print(f"run_id={run_id} (part directory: {batch_tmp_dir})")
 
     # Each job's own explicit seed, base_seed + job index -- NOT relying on
     # export_avalanche_trajectories' per-process auto-seeding, even though
@@ -273,13 +307,30 @@ def main() -> None:
         mem_flag = f"-M {args.mem_mb} " if args.mem_mb else ""
         r_flag = f"-R \"{' '.join(resource_parts)}\" " if resource_parts else ""
         for j in jobs:
+            if retry_indices is not None and j["index"] not in retry_indices:
+                print(f"  job {j['index']:3d}: NOT resubmitted (not in --retry-indices) -- "
+                      f"status will be read from existing {j['log_path']}")
+                continue
             print(f"  bsub -q {args.queue} {n_flag}{mem_flag}{r_flag}-o {j['log_path']} "
                   f"bash -lc \"{j['command']}\"")
         print("\n--dry-run: stopping before submission/merge.")
         return
 
-    print(f"\nSubmitting {len(jobs)} jobs to queue '{args.queue}' ...")
+    n_to_submit = len(jobs) if retry_indices is None else len(retry_indices)
+    print(f"\nSubmitting {n_to_submit} job(s) to queue '{args.queue}' ...")
     for j in jobs:
+        if retry_indices is not None and j["index"] not in retry_indices:
+            status = bsub_utils.status_from_log(j["log_path"])
+            if status is None:
+                parser.error(
+                    f"job {j['index']}: excluded from --retry-indices but its log "
+                    f"{j['log_path']} has no terminal status yet -- include it in "
+                    "--retry-indices, or wait for it to actually finish first."
+                )
+            j["job_id"] = None
+            j["_preresolved_status"] = status
+            print(f"  job {j['index']:3d}: not retried, resolved from existing log -> {status}")
+            continue
         j["job_id"] = bsub_utils.submit(
             j["command"], queue=args.queue, log_path=j["log_path"],
             job_name=f"{base_name}_avalanche_part{j['index']:03d}",
@@ -288,8 +339,9 @@ def main() -> None:
         print(f"  job {j['index']:3d}: submitted as LSF job {j['job_id']}")
 
     cache = bsub_utils.BJobStatusCache()
-    job_ids = [j["job_id"] for j in jobs]
-    log_paths = {j["job_id"]: j["log_path"] for j in jobs}
+    submitted_jobs = [j for j in jobs if j["job_id"] is not None]
+    job_ids = [j["job_id"] for j in submitted_jobs]
+    log_paths = {j["job_id"]: j["log_path"] for j in submitted_jobs}
 
     def _report(statuses: dict[int, str]) -> None:
         counts: dict[str, int] = {}
@@ -298,10 +350,18 @@ def main() -> None:
         summary = ", ".join(f"{k}={v}" for k, v in sorted(counts.items()))
         print(f"[{time.strftime('%H:%M:%S')}] {summary}")
 
-    print(f"\nPolling every {args.poll_interval}s until all jobs finish ...")
-    final_statuses = cache.wait_all(
-        job_ids, poll_interval_s=args.poll_interval, on_update=_report, log_paths=log_paths
-    )
+    if job_ids:
+        print(f"\nPolling every {args.poll_interval}s until all jobs finish ...")
+        final_statuses = cache.wait_all(
+            job_ids, poll_interval_s=args.poll_interval, on_update=_report, log_paths=log_paths
+        )
+    else:
+        final_statuses = {}
+
+    def _job_status(j: dict) -> str:
+        if j["job_id"] is None:
+            return j["_preresolved_status"]
+        return final_statuses.get(j["job_id"], "UNKNOWN")
 
     # Strict DONE-only merge condition (GitHub issue #9 item 2): a job
     # that's EXIT, or UNKNOWN (aged out of `bjobs -a` before we could
@@ -311,13 +371,12 @@ def main() -> None:
     # or truncated part got folded into a "successful" output for real on
     # 2026-09-25 -- no "final" file gets written at all now unless every
     # single part is confirmed DONE.
-    not_done = [j for j in jobs if final_statuses.get(j["job_id"]) != "DONE"]
+    not_done = [j for j in jobs if _job_status(j) != "DONE"]
     if not_done:
         print(f"\nERROR: {len(not_done)}/{len(jobs)} job(s) did not finish DONE -- refusing to "
               f"merge (no partial/best-effort output is written):")
         for j in not_done:
-            status = final_statuses.get(j["job_id"], "UNKNOWN")
-            print(f"  job {j['index']:3d}: status={status} (see {j['log_path']})")
+            print(f"  job {j['index']:3d}: status={_job_status(j)} (see {j['log_path']})")
         print(f"\nPart directory kept at {batch_tmp_dir} for inspection. Fix the underlying "
               f"issue (see the logs above) and re-run the whole batch -- it gets a fresh "
               f"run_id, so this won't collide with the failed attempt.")
