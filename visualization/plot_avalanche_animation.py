@@ -40,6 +40,7 @@ Output: results/img/<baseName>_event<N>_avalanche.gif -- one combined
     separate _3d.gif/_side.gif files).
 """
 
+import json
 import os
 import shutil
 import sys
@@ -53,6 +54,7 @@ import uproot
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "geometry"))
 from gem_unit_cell import hole_centers_tiled
+from analyze_plane_crossings import read_run_info
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 IMG_DIR = os.path.join(REPO_ROOT, "results", "img")
@@ -68,9 +70,40 @@ GEMS = [
 CU_COLOR = "#d98a3d"
 DIEL_COLOR = "#241a0d"
 ELECTRON_COLOR = np.array([1.0, 0.92, 0.15])
-VIEW_HALF_X, VIEW_HALF_Y = 360.0, 620.0  # um -- covers the full tiled domain
+# Fallback only, for a file with no run-info tree to read the real tiled
+# domain from (see _load_view_extent) -- matches the 5x5 tiling this
+# project used before issue #12 item 3's 7x7/9x9 convergence check.
+_DEFAULT_VIEW_HALF_X, _DEFAULT_VIEW_HALF_Y = 360.0, 620.0  # um
+_DEFAULT_PITCH_CM, _DEFAULT_N_CELLS = 0.014, 5
 Z_MIN, Z_MAX = -0.2029, 0.430  # cm -- GND up to just above GEM1
 _GRID_N = 320
+
+
+def _load_view_extent(root_path: str):
+    """(view_half_x_um, view_half_y_um, pitch_cm, n_cells_x, n_cells_y),
+    read from this file's own run-info tree's "model_info_json" entry
+    instead of the fixed 5x5-tiling defaults above -- those left the view
+    window (and the drawn GEM hole pattern) too narrow for a wider tiling
+    like 7x7/9x9, visibly clipping electrons at the frame edges (reported
+    2026-09-25, confirmed: ~20% of one 9x9 event's x-points and ~11% of its
+    y-points fell outside the old +-360/+-620um window). Falls back to
+    those defaults, with a warning, for an older file with no run-info tree
+    or no "geometry" half-extent in it.
+    """
+    with uproot.open(root_path) as f:
+        run_info = read_run_info(f)
+    if run_info and "model_info_json" in run_info:
+        g = json.loads(run_info["model_info_json"])["geometry"]
+        if all(k in g for k in ("half_extent_x_cm", "half_extent_y_cm", "pitch_cm",
+                                 "n_cells_x", "n_cells_y")):
+            return (g["half_extent_x_cm"] * 1e4, g["half_extent_y_cm"] * 1e4,
+                    g["pitch_cm"], g["n_cells_x"], g["n_cells_y"])
+    print(f"WARNING: {root_path} has no usable run-info geometry -- falling back to the "
+          f"default 5x5-tiling view window (+-{_DEFAULT_VIEW_HALF_X:.0f}/"
+          f"+-{_DEFAULT_VIEW_HALF_Y:.0f}um), which may be too narrow/wrong for this file's "
+          "actual tiling and clip or mis-draw electrons near the edges.")
+    return (_DEFAULT_VIEW_HALF_X, _DEFAULT_VIEW_HALF_Y, _DEFAULT_PITCH_CM,
+            _DEFAULT_N_CELLS, _DEFAULT_N_CELLS)
 
 
 def _hole_mask(GX, GY, holes_arr, radius_um):
@@ -97,9 +130,9 @@ def _draw_gem_geometry(ax, GX, GY, holes_arr):
                          antialiased=False, zorder=zo * 3 + 0.5)
 
 
-def _style_3d_axes(ax, view: str):
-    ax.set_xlim(-VIEW_HALF_X, VIEW_HALF_X)
-    ax.set_ylim(-VIEW_HALF_Y, VIEW_HALF_Y)
+def _style_3d_axes(ax, view: str, view_half_x: float, view_half_y: float):
+    ax.set_xlim(-view_half_x, view_half_x)
+    ax.set_ylim(-view_half_y, view_half_y)
     ax.set_zlim(Z_MIN, Z_MAX)
     ax.set_xlabel("x [um]", color="white")
     ax.set_ylabel("y [um]", color="white")
@@ -154,17 +187,23 @@ def _birth_death_step(t: np.ndarray, track: np.ndarray):
     return alive_times, alive_cum
 
 
-def render(out_path: str, x, y, z, t, alive_times, alive_cum,
-           label: str, n_frames: int = 100, fps: int = 20, age_window_ns: float = 40.0):
+def render(out_path: str, x, y, z, t, alive_times, alive_cum, label: str,
+           view_half_x: float, view_half_y: float, pitch_cm: float, n_cells_x: int, n_cells_y: int,
+           n_frames: int = 100, fps: int = 20, age_window_ns: float = 40.0):
     """One combined GIF: perspective (oblique) and true side-on (elev=0)
     3D panels side by side, sharing one electron-count panel below --
     replaces the earlier two-separate-GIF layout at the user's request
     (2026-09-25), so the oblique and side views can be compared directly
-    without needing the GEM structure to stay visible in the side view."""
-    holes_um = [(hx * 1e4, hy * 1e4) for hx, hy in hole_centers_tiled(0.014, 5, 5)]
+    without needing the GEM structure to stay visible in the side view.
+
+    view_half_x/y, pitch_cm, n_cells_x/y: this event's actual tiled-domain
+    extent and hole pattern (see _load_view_extent) -- NOT a fixed 5x5
+    assumption, which clipped electrons at the frame edges for a wider
+    tiling like 9x9 (reported 2026-09-25)."""
+    holes_um = [(hx * 1e4, hy * 1e4) for hx, hy in hole_centers_tiled(pitch_cm, n_cells_x, n_cells_y)]
     holes_arr = np.array(holes_um)
-    gx = np.linspace(-VIEW_HALF_X, VIEW_HALF_X, _GRID_N)
-    gy = np.linspace(-VIEW_HALF_Y, VIEW_HALF_Y, _GRID_N)
+    gx = np.linspace(-view_half_x, view_half_x, _GRID_N)
+    gy = np.linspace(-view_half_y, view_half_y, _GRID_N)
     GX, GY = np.meshgrid(gx, gy)
 
     t_max = t.max()
@@ -190,8 +229,8 @@ def render(out_path: str, x, y, z, t, alive_times, alive_cum,
     ax_side = fig.add_subplot(gs[0, 1], projection="3d")
     ax_count = fig.add_subplot(gs[1, :])
 
-    _style_3d_axes(ax_persp, "perspective")
-    _style_3d_axes(ax_side, "side")
+    _style_3d_axes(ax_persp, "perspective", view_half_x, view_half_y)
+    _style_3d_axes(ax_side, "side", view_half_x, view_half_y)
     _draw_gem_geometry(ax_persp, GX, GY, holes_arr)
     _draw_gem_geometry(ax_side, GX, GY, holes_arr)
 
@@ -268,9 +307,11 @@ def main() -> None:
     os.makedirs(IMG_DIR, exist_ok=True)
     x, y, z, t, track = _load_event(root_path, event)
     alive_times, alive_cum = _birth_death_step(t, track)
+    view_half_x, view_half_y, pitch_cm, n_cells_x, n_cells_y = _load_view_extent(root_path)
 
     out_path = os.path.join(IMG_DIR, f"{base_name}_event{event}_avalanche.gif")
-    render(out_path, x, y, z, t, alive_times, alive_cum, label)
+    render(out_path, x, y, z, t, alive_times, alive_cum, label,
+           view_half_x, view_half_y, pitch_cm, n_cells_x, n_cells_y)
 
     if set_as_readme_demo:
         demo_path = os.path.join(IMG_DIR, "avalanche_demo.gif")
