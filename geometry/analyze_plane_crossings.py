@@ -195,15 +195,50 @@ def require_trajectories_tree(f, root_path: str, required_branches: list[str]):
     return tree
 
 
+def resolve_run_info_tree(f):
+    """This file's own run-info TTree, preferring "RunInfoTrajectories" but
+    falling back to the legacy shared "RunInfo" name it replaced (GitHub
+    issue #11 item 1) when that's all a file has. Needed for a file produced
+    by a job whose binary predated the tree-name split -- real, hit
+    2026-09-25: the 9x9 finite-geometry batch's jobs (issue #12 item 3) were
+    already running when a mid-session rebuild picked up that rename, so the
+    batch's part files ended up a mix of both names depending on when each
+    job actually started. Returns None if the file has neither tree.
+    """
+    for name in ("RunInfoTrajectories", "RunInfo"):
+        if name in f:
+            return f[name]
+    return None
+
+
+def read_run_info(f) -> dict[str, str]:
+    """The (key, value) pairs from this file's own run-info tree (see
+    resolve_run_info_tree), collapsed to a plain dict -- last row wins per
+    key, which is fine for a single-part file or for a field expected to be
+    identical across every part of a merged file (e.g. model_info_json).
+    For a field that legitimately differs per part (e.g. summing
+    n_events_at_avalanche_size_limit across parts), read
+    resolve_run_info_tree(f)'s arrays directly instead of using this.
+    Returns {} if the file has no run-info tree at all.
+    """
+    tree = resolve_run_info_tree(f)
+    if tree is None:
+        return {}
+    arr = tree.arrays(["key", "value"], library="np")
+    return dict(zip(arr["key"], arr["value"]))
+
+
 def _load_config_from_run_info(root_path: str) -> TripleGemTestConfig | None:
     """Reconstruct the TripleGemTestConfig actually used for this run, read
-    from the "RunInfoTrajectories" tree's "model_info_json" entry (see macros/run_info.hh,
-    GitHub issue #6 items 1-2) instead of assuming today's default
-    TripleGemTestConfig() still matches whatever produced this file.
+    from the run-info tree's "model_info_json" entry via read_run_info() (see
+    macros/run_info.hh, GitHub issue #6 items 1-2) instead of assuming
+    today's default TripleGemTestConfig() still matches whatever produced
+    this file.
 
-    Returns None if the file has no "RunInfoTrajectories" tree (predates that addition
-    -- caller should fall back to the default config with a clear warning,
-    not silently assume they match).
+    Returns None if the file has no run-info tree at all, or none of them
+    carry "model_info_json" (predates that addition -- caller should fall
+    back to the default config with a clear warning, not silently assume
+    they match).
 
     A batch-merged file (batch/run_avalanche_batch.py's hadd) has one
     "RunInfoTrajectories" tree per merged part, all with the same model_info_json (only
@@ -211,13 +246,10 @@ def _load_config_from_run_info(root_path: str) -> TripleGemTestConfig | None:
     occurrence is correct and deliberate, not an oversight.
     """
     with uproot.open(root_path) as f:
-        if "RunInfoTrajectories" not in f:
-            return None
-        arr = f["RunInfoTrajectories"].arrays(["key", "value"], library="np")
-    model_info_json_values = [v for k, v in zip(arr["key"], arr["value"]) if k == "model_info_json"]
-    if not model_info_json_values:
+        run_info = read_run_info(f)
+    if not run_info or "model_info_json" not in run_info:
         return None
-    model_info = json.loads(model_info_json_values[0])
+    model_info = json.loads(run_info["model_info_json"])
     g = model_info["geometry"]
     if "layers" not in g:
         # model_info.json predates the per-layer geometry_info extension

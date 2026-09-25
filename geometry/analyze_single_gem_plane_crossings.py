@@ -30,7 +30,9 @@ import sys
 import numpy as np
 import uproot
 
-from analyze_plane_crossings import _crossed, _interpolated_xy_at_plane, _status_name, require_trajectories_tree
+from analyze_plane_crossings import (
+    _crossed, _interpolated_xy_at_plane, _status_name, read_run_info, require_trajectories_tree,
+)
 from gem_params import GEM_50UM, GEM_100UM
 
 # Single-GEM foil z-boundaries (see single_gem_field_model.py:
@@ -65,23 +67,20 @@ def _birth_region(z_val: float, z_gem_top: float, z_gem_bottom: float) -> str:
 
 def _load_geometry_from_run_info(root_path: str) -> tuple[float, float, float] | None:
     """(z_gem_top_cm, z_gem_bottom_cm, transfer_gap_cm), read from this
-    file's own "RunInfoTrajectories" tree's "model_info_json" entry (see
-    macros/run_info.hh, GitHub issue #6 items 1-2) instead of assuming a
-    CLI-selected GEM_50UM/GEM_100UM catalog value and a hardcoded
+    file's own run-info tree's "model_info_json" entry via read_run_info()
+    (see macros/run_info.hh, GitHub issue #6 items 1-2) instead of assuming
+    a CLI-selected GEM_50UM/GEM_100UM catalog value and a hardcoded
     _TRANSFER_GAP_CM still match whatever this file was actually built
     with (e.g. a non-default transfer-field diagnostic run, see this
-    file's own module docstring). Returns None if unavailable (no RunInfo
+    file's own module docstring). Returns None if unavailable (no run-info
     tree, or an older model_info.json missing these fields) -- caller
     falls back to the CLI/hardcoded path with its own warning.
     """
     with uproot.open(root_path) as f:
-        if "RunInfoTrajectories" not in f:
-            return None
-        arr = f["RunInfoTrajectories"].arrays(["key", "value"], library="np")
-    model_info_json_values = [v for k, v in zip(arr["key"], arr["value"]) if k == "model_info_json"]
-    if not model_info_json_values:
+        run_info = read_run_info(f)
+    if not run_info or "model_info_json" not in run_info:
         return None
-    g = json.loads(model_info_json_values[0])["geometry"]
+    g = json.loads(run_info["model_info_json"])["geometry"]
     if "z_gem_top_cm" not in g or "z_gem_bottom_cm" not in g or "transfer_gap_cm" not in g:
         return None
     return g["z_gem_top_cm"], g["z_gem_bottom_cm"], g["transfer_gap_cm"]

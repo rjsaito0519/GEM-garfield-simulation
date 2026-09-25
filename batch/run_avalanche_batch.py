@@ -66,15 +66,21 @@ DEFAULT_QUEUE = "s"  # confirmed Open:Active on this cluster via `bqueues`, 2026
 
 
 def _read_run_info(root_path: str) -> dict[str, str]:
-    """The (key, value) pairs from a part file's own "RunInfoTrajectories" tree, as a
+    """The (key, value) pairs from a part file's own run-info tree, as a
     plain dict (see macros/run_info.hh) -- used to cross-check that a part
     file actually matches what *this* run expected of it (GitHub issue #9
-    item 3), not just that some file happens to exist at that path."""
+    item 3), not just that some file happens to exist at that path.
+
+    Prefers "RunInfoTrajectories" but falls back to the legacy shared
+    "RunInfo" name it replaced (GitHub issue #11 item 1): a part whose job
+    was already running when a mid-batch binary rebuild picked up that
+    rename still has the old name (real, hit 2026-09-25, the 9x9 batch)."""
     with uproot.open(root_path) as f:
-        if "RunInfoTrajectories" not in f:
-            return {}
-        arr = f["RunInfoTrajectories"].arrays(["key", "value"], library="np")
-    return dict(zip(arr["key"], arr["value"]))
+        for name in ("RunInfoTrajectories", "RunInfo"):
+            if name in f:
+                arr = f[name].arrays(["key", "value"], library="np")
+                return dict(zip(arr["key"], arr["value"]))
+    return {}
 
 
 def _validate_part(job: dict) -> list[str]:

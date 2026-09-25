@@ -30,7 +30,7 @@ import sys
 import numpy as np
 import uproot
 
-from analyze_plane_crossings import require_trajectories_tree
+from analyze_plane_crossings import require_trajectories_tree, resolve_run_info_tree
 
 
 def main() -> None:
@@ -45,8 +45,9 @@ def main() -> None:
 
         avalanche_size_limit = None
         n_at_limit_from_run_info = None
-        if "RunInfoTrajectories" in f:
-            arr = f["RunInfoTrajectories"].arrays(["key", "value"], library="np")
+        run_info_tree = resolve_run_info_tree(f)
+        if run_info_tree is not None:
+            arr = run_info_tree.arrays(["key", "value"], library="np")
             keys, values = arr["key"], arr["value"]
             limits = [float(v) for k, v in zip(keys, values) if k == "avalanche_size_limit"]
             at_limit = [int(v) for k, v in zip(keys, values) if k == "n_events_at_avalanche_size_limit"]
