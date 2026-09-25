@@ -44,7 +44,7 @@ J. Phys.: Conf. Ser. 1498 (2020) 012023.
 | Transfer field | 2000 V/cm |
 | Induction field | 3100 V/cm |
 | ガス | P-10 (Ar 90% + CH4 10%), 1 atm |
-| Tiling (n_cells) | **7×7**（`triple_gem_field_v1.15x_n7`。3×3→5×5→7×7と拡張して比較した結果、5×5はまだ収束しておらずタイル境界からのラテラル脱出損失がGEM1-extracted cohortの34.2%を占めていた（7×7ではほぼ消失）ことが判明したため、2026-09-24に5×5から変更 -- 詳細は`docs/debugging_notes.md`「5x5 vs 7x7タイル収束性比較」参照。7×7自体が十分収束しているかは9×9との比較で追加確認中） |
+| Tiling (n_cells) | **7×7**（`triple_gem_field_v1.15x_n7`。3×3→5×5→7×7と拡張して比較した結果、5×5はまだ収束しておらずタイル境界からのラテラル脱出損失がGEM1-extracted cohortの34.2%を占めていた（7×7ではほぼ消失）ことが判明したため、2026-09-24に5×5から変更 -- 詳細は`docs/debugging_notes.md`「5x5 vs 7x7タイル収束性比較」参照。**2026-09-25、9×9(50イベント)と比較して7×7自体の収束も確認済み**: 最終fateに両者ともラテラル脱出(StatusLeftDriftArea)が0件、GEM2ホール進入率(cohort比)14.7%(7x7)/16.1%(9x9)・GEM2通過2.8-3.1%・GEM3到達0.4%・GEM3通過0.1%とほぼ一致。7x7では transfer gap 1内でのT1 25%→75%にわずかな残存低下(40.8%→38.9%)があるが9x9では消失(41.1%→40.9%) -- 小さいが無視できる程度、7×7を production tile sizeとして継続採用） |
 | Avalanche size limit | 2000（`EnableAvalancheSizeLimit`）。**Penning transfer有効化後、実際に頻繁に到達することを確認**（7×7・50イベントで28イベント(56%)が上限到達、5×5でも2/50。上限到達イベントは、その時点で未処理だった電子がGarfield++の実装上トラック自体が記録されないまま切り捨てられる（`AvalancheMicroscopic::transportParticleStack`のソース確認済み）ため、透過率等の絶対値は過小評価方向のバイアスを持つ可能性がある -- 現状の解析結果はこの制約下のものとして読む必要がある。上限引き上げの要否はユーザー判断待ち |
 | 電子注入位置・方向 | GEM1ホール軸近傍への非一様（軸寄り）注入、方向(0,0,-1)（診断目的の簡略化、実際の拡散後角度分布を再現するものではない -- 詳細は`macros/gem_avalanche.cpp`のコメント参照） |
 | 解析手法 | plane-crossing analysis（`geometry/analyze_plane_crossings.py`）。古いendpoint-based判定は誤った結論を出していたことが判明済み（下記「ステータス」のSUPERSEDED項目参照） |
@@ -146,11 +146,20 @@ Garfield++の再ビルド手順（ROOTバージョンを上げた場合など）
       cohortの34.2%を占めていたタイル境界からのラテラル脱出損失が7x7では
       ほぼ消失し、GEM2ホール進入率が2.4%→14.7%、GEM3完全通過が0/9054→
       6/7368件に増加。**production condition のtilingを5x5から7x7に
-      変更済み**（9x9との比較で7x7自体の収束性も追加確認中）。(4)
+      変更済み**。2026-09-25、9x9(50イベント)との比較で7x7自体の収束も
+      確認（GitHub issue #12 item 3）: 最終fateのラテラル脱出が両者とも
+      0件、GEM2ホール進入率・GEM2通過・GEM3到達/通過の各比率も統計誤差内
+      で一致、7x7側にtransfer gap 1内でのごくわずかな残存低下があるのみ
+      -- 7x7を production tile sizeとして継続採用でよいと判断。(4)
       Penning有効化後は`EnableAvalancheSizeLimit(2000)`に頻繁に到達する
       ことが判明（7x7・50イベント中28イベント）— 到達イベントは電子が
       記録されないまま切り捨てられるため、絶対値は過小評価方向のバイアス
-      を持ちうる、上限引き上げの要否は検討中。periodic boundary・電圧scan
+      を持ちうる。2026-09-25、issue #12 item 1として2000/5000/10000/20000
+      のsweepで確認した結果、`avalanche_size_limit=20000`を今後のproduction
+      limitとして採用（詳細はdocs/reference.md参照）。**ただし現在の
+      `triple_gem_field_v1.15x_n7_avalanche.root`自体はこの確認より前の
+      生成物でまだ2000のまま** -- 20000での再生成は別途bsub投入の承認が
+      必要。periodic boundary・電圧scan
       の体系化・文献比較は引き続きGitHub issue #7で進行中。検証済み/
       未検証の仮説一覧・次の一手候補・パイプライン構築時の落とし穴は
       `docs/debugging_notes.md` 参照

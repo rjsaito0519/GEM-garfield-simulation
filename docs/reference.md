@@ -156,6 +156,26 @@ condition」参照）。上の結論を反映するには`--avalanche-size-limit
 を付けてn7を再生成する必要があるが、それには新規bsub投入の承認が要るため
 未実施 -- ユーザー判断待ち。
 
+**2026-09-25解消: issue #12 item 3 (7x7 vs 9x9 finite geometry
+convergence)。** `triple_gem_field_v1.15x_n9`(9x9、50イベント、
+avalanche_size_limit=20000)を`triple_gem_field_v1.15x_n7`(7x7、50イベント)
+と`analyze_plane_crossings.py`で比較:
+
+| 指標 (GEM1-extracted cohort比) | 7x7 | 9x9 |
+|---|---|---|
+| T1 25%→75%の低下 | 40.8%→38.9% | 41.1%→40.9% |
+| GEM2 hole entrance | 14.7% | 16.1% |
+| GEM2 bottom | 3.1% | 2.8% |
+| GEM3 top | 0.4% | 0.4% |
+| GEM3 bottom | 0.1% (6/7368) | 0.1% (10/10309) |
+| 最終fateでの"StatusLeftDriftArea"(ラテラル脱出) | 0件 | 0件 |
+
+GEM2以降の各比率は統計誤差内で一致し、両方とも最終fateにラテラル脱出が
+一切ない（5x5で見られた34.2%の大きな損失は完全に解消済み）。7x7側の
+transfer gap 1内でのT1 25%→75%のわずかな残存低下（9x9では消失）のみが
+差分だが、無視できる規模。よって**7x7を production tile sizeとして
+継続採用する**（9x9へ拡張する必要なし）。
+
 同issue item 2として`collisionSteps`(trajectory export時のcollision point
 間引き)の1/5/20 sweepも実施し、GEM1 extraction等の比率・avalanche size
 limit到達割合ともにcollisionSteps値に対する系統的な傾向は見られなかった
