@@ -88,14 +88,30 @@ def _validate_part(job: dict) -> list[str]:
     run actually submitted for it -- empty list means it's consistent.
     Missing RunInfo entirely (an older export_avalanche_trajectories build)
     is reported as a problem too, not silently skipped, since GitHub issue
-    #9 wants this checked whenever it's possible to check."""
+    #9 wants this checked whenever it's possible to check.
+
+    Deliberately does NOT check rng_seed against job["seed"]: with
+    --resume-run-id/--retry-indices (added for GitHub issue #12 item 3's
+    9x9 batch), a retry invocation that doesn't repeat the exact same
+    --base-seed gets a different (still perfectly valid, still unique
+    enough) seed than the original attempt used for that same index --
+    real, hit 2026-09-25 re-generating triple_gem_field_v1.15x_n7 with the
+    new avalanche_size_limit. The seed's only job is uniqueness/
+    reproducibility, not matching a specific formula, so checking it here
+    would reject genuinely-fine retried parts. event_offset/n_events (which
+    events this part actually covers) and avalanche_size_limit/
+    geometry_type (which run parameters it used) are the checks that
+    actually catch a part not belonging in this merge, and are unaffected
+    by base_seed drift.
+    """
     run_info = _read_run_info(job["part_root_path"])
     if not run_info:
         return ["no RunInfo tree in part file -- cannot verify it matches this run "
                 "(rebuild macros/export_avalanche_trajectories if this is unexpected)"]
     problems = []
+    if not run_info.get("rng_seed", "").lstrip("-").isdigit():
+        problems.append(f"RunInfo['rng_seed'] = {run_info.get('rng_seed')!r} is not a valid seed")
     expected = {
-        "rng_seed": str(job["seed"]),
         "event_offset": str(job["offset"]),
         "n_events": str(job["n_events"]),
         "avalanche_size_limit": str(job["avalanche_size_limit"]),

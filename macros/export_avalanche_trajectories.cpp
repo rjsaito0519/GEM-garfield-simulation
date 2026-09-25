@@ -205,6 +205,24 @@ int main(int argc, char* argv[]) {
   TFile* rootFile = TFile::Open(rootPath.c_str(), "UPDATE");
   rootFile->Delete("Trajectories;*");
   TTree trajectoriesTree("Trajectories", "Per-point avalanche electron trajectories");
+  // Disable ROOT's automatic mid-run TTree autosave (default: every ~300MB
+  // of TBasket data triggers an implicit Write(), leaving multiple
+  // cumulative "cycles" of the same tree name in the file once the real,
+  // explicit Write() below also runs). Each autosave cycle is complete and
+  // correct on its own, and hadd already resolves to the latest one
+  // correctly, but a heavy event's file (300MB+, common with the current
+  // avalanche_size_limit=20000) can end up with a dozen-plus cycles, and
+  // that specific multi-cycle key-table layout intermittently makes uproot
+  // fail to read the file at all ("ValueError: read length must be
+  // non-negative or -1", not a real ROOT/hadd-side problem -- confirmed via
+  // `rootls`/`hadd` reading the same file fine -- but it broke this
+  // project's batch merge validation, which is uproot-based; real, hit
+  // 2026-09-25 regenerating triple_gem_field_v1.15x_n7 with the new
+  // avalanche_size_limit). One clean cycle per run avoids the whole class
+  // of issue; a run either finishes and writes it, or gets killed and
+  // writes nothing, which this project's batch tooling already treats as a
+  // failed part either way (no partial-file fallback is expected).
+  trajectoriesTree.SetAutoSave(0);
   int b_event;
   std::size_t b_track;
   double b_x, b_y, b_z, b_t, b_energy;

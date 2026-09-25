@@ -248,6 +248,12 @@ int main(int argc, char* argv[]) {
   TFile* rootFile = TFile::Open(rootPath.c_str(), "UPDATE");
   rootFile->Delete("Endpoints;*");
   TTree endpointsTree("Endpoints", "Per-electron-endpoint avalanche data");
+  // Disable ROOT's automatic mid-run TTree autosave -- see the identical
+  // call in export_avalanche_trajectories.cpp for why (multi-cycle files
+  // intermittently unreadable by uproot, 2026-09-25). Endpoints is much
+  // smaller per-event than Trajectories so less likely to hit the autosave
+  // threshold in practice, but there is no reason to risk it here either.
+  endpointsTree.SetAutoSave(0);
   int b_event, b_status;
   double b_xs, b_ys, b_zs, b_ts, b_es, b_xe, b_ye, b_ze, b_te, b_ee;
   endpointsTree.Branch("event", &b_event);
