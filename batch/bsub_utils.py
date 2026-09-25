@@ -52,16 +52,25 @@ def status_from_log(log_path: str) -> str | None:
     and the batch's strict DONE-only merge gate (GitHub issue #9 item 2)
     correctly refused to merge -- correctly conservative, but needlessly
     so, since the data was fine).
+
+    Uses the LAST header in the file, not the first: `bsub -o <path>`
+    APPENDS rather than truncates when a job is resubmitted against a log
+    path that already has content from an earlier attempt at that same
+    path (real, hit 2026-09-25 retrying 8 TERM_CPULIMIT-killed 9x9 jobs via
+    run_avalanche_batch.py's --retry-indices, which deliberately reuses
+    each part's original log_path -- reading only the first 2000 bytes
+    found the ORIGINAL failed job's "Exited" header and reported the
+    retried, actually-successful job as EXIT again).
     """
     try:
         with open(log_path) as f:
-            head = f.read(2000)
+            content = f.read()
     except OSError:
         return None
-    match = _LSF_LOG_STATUS_RE.search(head)
-    if match is None:
+    matches = list(_LSF_LOG_STATUS_RE.finditer(content))
+    if not matches:
         return None
-    return "DONE" if match.group(1) == "Done" else "EXIT"
+    return "DONE" if matches[-1].group(1) == "Done" else "EXIT"
 
 
 def build_login_shell_command(shell_command: str) -> list[str]:
