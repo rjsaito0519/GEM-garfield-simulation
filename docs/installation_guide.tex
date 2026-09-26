@@ -67,6 +67,10 @@ user needs (a version table and where paths are set); this document is
 the fuller reference for someone setting this stack up for the first
 time, or rebuilding a piece of it after an upgrade.
 
+This is written for a shared HEP cluster (e.g.\ KEKCC), where you
+typically have no sudo/admin rights. Every install step below goes under
+\texttt{\$HOME}, not a system directory.
+
 \subsection{Why installation order matters}
 
 The one constraint that drives most of the pain in this stack is:
@@ -144,10 +148,13 @@ uses C++17 throughout, so GSL is neither installed nor linked.
 
 \section{ROOT}
 
-Install ROOT first, since Garfield++'s build depends on it. Follow
-ROOT's own build instructions
-(\url{https://root.cern/install/build_from_source/}) for your platform;
-in short, for a from-source build:
+Most HEP clusters (KEKCC and similar) already have a ROOT installation
+available. Use that one -- the only project-specific requirement is that
+Garfield++ (Section~5) gets built against the exact same ROOT. Check the
+version with \texttt{root-config --version}.
+
+If no ROOT install is available, build it yourself, no sudo/admin rights
+needed (everything goes under \texttt{\$HOME}):
 
 \begin{lstlisting}
 git clone --branch v6-40-04 --depth 1 https://github.com/root-project/root.git root_src
@@ -157,20 +164,14 @@ cmake --build . -j"$(nproc)"
 cmake --install .
 \end{lstlisting}
 
-After installing, source ROOT's environment script before using it:
+Full build instructions/options:
+\url{https://root.cern/install/build_from_source/}.
 
-\begin{lstlisting}
-source $HOME/local/root/6.40.04/bin/thisroot.sh
-root-config --version   # sanity check
-\end{lstlisting}
-
-This project does \emph{not} rely on \texttt{thisroot.sh} being sourced
+This project does not rely on \texttt{thisroot.sh} being sourced
 globally (e.g. from \texttt{.bashrc}) -- each script/build step sets the
-paths it needs explicitly (see Section~\ref{sec:paths}), so that the
-shell startup used for day-to-day work is not slowed down by always
-loading a full ROOT environment. Set it up however is convenient for your
-own workflow; just be consistent about which ROOT installation every
-other tool below is pointed at.
+paths it needs explicitly (see Section~\ref{sec:paths}). Just be
+consistent about which ROOT installation every other tool below is
+pointed at.
 
 \section{Gmsh}
 
@@ -308,13 +309,15 @@ comments).
 \section{Python environment}
 \label{sec:python}
 
-Any Python 3 environment (conda, venv, or a plain \texttt{pip install
---user}) works; this project does not depend on a specific environment
-manager. Install:
+Any Python 3 environment works (conda, venv, or plain \texttt{pip install
+--user}); this project does not depend on a specific environment manager.
+No sudo needed either way -- a conda/venv environment installs under
+\texttt{\$HOME} by default, and \texttt{--user} does the same for a
+system Python:
 
 \begin{lstlisting}
-pip install gmsh numpy matplotlib uproot pyvista plotly
-pip install "vtk==9.3.1"
+pip install --user gmsh numpy matplotlib uproot pyvista plotly
+pip install --user "vtk==9.3.1"
 \end{lstlisting}
 
 \subsection{The \texttt{vtk} version pin (required)}

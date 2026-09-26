@@ -64,6 +64,10 @@
 セットアップする、あるいは何かをアップグレードした後に一部を
 再構築するユーザー向けの、より詳しいリファレンスである。
 
+本書は共有HEPクラスタ(KEKCCなど)、つまり通常sudo/管理者権限が無い
+環境を想定して書いている。以下の各インストール手順は、システム
+ディレクトリではなく\texttt{\$HOME}配下に置く。
+
 \subsection{インストール順序が重要な理由}
 
 このスタックの面倒ごとの大半を引き起こしている制約はただ一つ:
@@ -143,10 +147,13 @@ Garfield++ビルドは一貫してC++17を使用しているため、GSLはイ�
 
 \section{ROOT}
 
-Garfield++のビルドがROOTに依存するため、まずROOTをインストールする。
-自分のプラットフォーム向けにROOT自身のビルド手順
-(\url{https://root.cern/install/build_from_source/})に従うこと。
-ソースからビルドする場合の概略は以下の通り:
+多くのHEP系クラスタ(KEKCCなど)には、既にROOTがインストールされている。
+それを使えばよい――本プロジェクト固有の要件は、Garfield++(セクション5)
+を同じそのROOTに対してビルドすることだけである。バージョンは
+\texttt{root-config --version}で確認する。
+
+ROOTが無い場合は自分でビルドする。sudo/管理者権限は不要(すべて
+\texttt{\$HOME}配下に収まる):
 
 \begin{lstlisting}
 git clone --branch v6-40-04 --depth 1 https://github.com/root-project/root.git root_src
@@ -156,20 +163,14 @@ cmake --build . -j"$(nproc)"
 cmake --install .
 \end{lstlisting}
 
-インストール後、使用前にROOTの環境スクリプトをsourceする:
-
-\begin{lstlisting}
-source $HOME/local/root/6.40.04/bin/thisroot.sh
-root-config --version   # 動作確認
-\end{lstlisting}
+詳しいビルド手順・オプション:
+\url{https://root.cern/install/build_from_source/}。
 
 本プロジェクトは\texttt{thisroot.sh}が(\texttt{.bashrc}などから)
-グローバルにsourceされていることに\emph{依存しない}――各スクリプト・
+グローバルにsourceされていることには依存しない――各スクリプト・
 ビルド手順が必要なパスをその都度明示的に設定する(\ref{sec:paths}節
-参照)。これは、日常作業で使うシェルの起動が、毎回ROOT環境一式を
-読み込むことで遅くならないようにするための設計である。自分の
-ワークフローに合わせて好きなようにセットアップしてよいが、以降の
-すべてのツールがどのROOTインストールを指しているか、一貫させること。
+参照)。以降のすべてのツールがどのROOTインストールを指しているか、
+一貫させることだけ気をつければよい。
 
 \section{Gmsh}
 
@@ -311,12 +312,13 @@ cmake -DROOT_DIR=$HOME/local/root/6.40.04/cmake ..
 \label{sec:python}
 
 conda・venv・素の\texttt{pip install --user}のいずれでもよく、
-本プロジェクトは特定の環境マネージャに依存しない。以下をインストール
-する:
+本プロジェクトは特定の環境マネージャに依存しない。どちらもsudoは
+不要(conda/venv環境はデフォルトで\texttt{\$HOME}配下に入り、
+\texttt{--user}も同様)。以下をインストールする:
 
 \begin{lstlisting}
-pip install gmsh numpy matplotlib uproot pyvista plotly
-pip install "vtk==9.3.1"
+pip install --user gmsh numpy matplotlib uproot pyvista plotly
+pip install --user "vtk==9.3.1"
 \end{lstlisting}
 
 \subsection{\texttt{vtk}のバージョン固定(必須)}
