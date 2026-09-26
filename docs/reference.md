@@ -113,7 +113,8 @@ cd ..
 python3 batch/run_avalanche_batch.py \
   results/mesh/triple_gem_field_v1.15x_n7 resources/ar_ch4_90_10.gas \
   50 -0.2029 0.8405 0.4235 0.049 0.08487048957087498 0.1 0.0005 \
-  --njobs 10 --queue s
+  --njobs 10 --avalanche-size-limit 20000
+# queue引数省略時のデフォルトは"l"(2026-09-26変更、下記参照)。
 # -> results/root/triple_gem_field_v1.15x_n7_avalanche.root ("Trajectories" + "RunInfoTrajectories" tree)
 
 # 4. genuine plane-crossing解析（GEM1-extracted cohortのfunnel、最終fate等）
@@ -155,7 +156,10 @@ limit到達割合は5000以上で0%に落ち、GEM1-extracted cohortの各funnel
 
 - queue "s"(150分CPU上限)では、limitが緩んだ分イベント処理が長引き
   10ジョブ中7ジョブがTERM_CPULIMITで失敗 -- 9x9バッチと同じ原因。queue "l"
-  (1200分)へ`--retry-indices`で再投入して解決。
+  (1200分)へ`--retry-indices`で再投入して解決。**2026-09-26、9x9・n7の両方で
+  同じ理由でqueue "s"→"l"のリトライが発生したため、`run_avalanche_batch.py`
+  の`--queue`デフォルトを"s"から"l"に変更**（"sで投入→CPU上限で失敗を発見→
+  lに再投入」という毎回の無駄な待ち時間を避けるため）。
 - 一部partファイル(特にサイズの大きいもの)がROOTのTTree autosaveで
   複数cycleを持つ状態になり、`uproot`で読めなくなる
   (`ValueError: read length must be non-negative or -1`、ROOT自体/`hadd`は
@@ -338,8 +342,8 @@ python3 batch/run_avalanche_batch.py results/mesh/<baseName> resources/ar_ch4_90
   <n_events_total> <zSensorMin> <zSensorMax> <zInjection> <xHalfCm> <yHalfCm> \
   [e0_eV] [injectionRadiusCm] [collisionSteps] --njobs 10 --dry-run
 
-# 実際に投入する場合は --dry-run を外す
-python3 batch/run_avalanche_batch.py ... --njobs 10 --queue s
+# 実際に投入する場合は --dry-run を外す（--queueを省略するとデフォルトの"l"に投入される）
+python3 batch/run_avalanche_batch.py ... --njobs 10
 ```
 
 各ジョブの中間ファイル・bsubログは`results/root/.batch_tmp/<baseName>/<run_id>/partNNN/`

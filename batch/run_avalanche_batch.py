@@ -62,7 +62,12 @@ import bsub_utils
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MACRO_BINARY = os.path.join(REPO_ROOT, "macros", "build", "export_avalanche_trajectories")
 RESULTS_ROOT_DIR = os.path.join(REPO_ROOT, "results", "root")
-DEFAULT_QUEUE = "s"  # confirmed Open:Active on this cluster via `bqueues`, 2026-09-24
+DEFAULT_QUEUE = "l"  # 1200 min CPU limit vs queue "s"'s 150 min (both confirmed
+# Open:Active via `bqueues`, 2026-09-24). Changed from "s" 2026-09-26: with
+# avalanche_size_limit raised to 20000 (issue #12), heavy events routinely
+# exceed 150 CPU-min, so submitting to "s" first now means paying for a
+# guaranteed-to-fail wait before retrying on "l" anyway (hit twice, 9x9 and
+# n7 regeneration) -- go straight to "l".
 
 
 def _read_run_info(root_path: str) -> dict[str, str]:
