@@ -51,7 +51,7 @@ int main(int argc, char* argv[]) {
   // geo.gas_material_index is read from the actual "Gas" physical group ID
   // the geometry builder wrote (model_info.hh), not hardcoded -- see that
   // struct's own comment and docs/pipeline_gotchas.md #8 (ComponentElmer
-  // subtracts 1 from mesh.names' 1-based body ID) and GitHub issue #6 item 3.
+  // subtracts 1 from mesh.names' 1-based body ID).
   ComponentElmer elm(meshDir + "mesh.header", meshDir + "mesh.elements",
                       meshDir + "mesh.nodes", meshDir + "dielectrics.dat",
                       meshDir + baseName + ".result", "cm");

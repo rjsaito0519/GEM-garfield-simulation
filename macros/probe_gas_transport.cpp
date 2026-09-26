@@ -6,7 +6,7 @@
  * the near-total electron loss found there (see docs/debugging_notes.md),
  * independent of any code bug.
  *
- * CAVEAT (found 2026-09-23, not yet resolved): against the currently
+ * CAVEAT (unresolved): against the currently
  * checked-in resources/ar_ch4_90_10.gas, ElectronVelocity() and
  * ElectronTownsend() both return false (no usable table), and
  * ElectronDiffusion() returns the exact same value for both DL and DT at

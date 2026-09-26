@@ -3,15 +3,14 @@
  * a simulation output file, recording the conditions actually used for that
  * run -- so an output file is self-describing and analysis code doesn't
  * have to trust that its own re-derived config still matches whatever
- * simulation produced the file (see GitHub issue #6, items 1-3).
+ * simulation produced the file.
  *
  * Tree name is caller-supplied ("RunInfoEndpoints" for gem_avalanche.cpp,
  * "RunInfoTrajectories" for export_avalanche_trajectories.cpp) rather than
- * one shared "RunInfo" name -- the original single shared name meant
- * whichever of those two macros ran most recently against a given output
- * file silently overwrote the other's metadata (last-writer-wins), even
- * though their sibling data trees ("Endpoints"/"Trajectories") coexist
- * fine. See GitHub issue #11 item 1.
+ * one shared "RunInfo" name -- a single shared name would mean whichever
+ * of those two macros ran most recently against a given output file
+ * silently overwrote the other's metadata (last-writer-wins), even though
+ * their sibling data trees ("Endpoints"/"Trajectories") coexist fine.
  *
  * A flexible key/value schema is used deliberately, not a fixed branch per
  * field: single-GEM and triple-GEM model_info.json have different
@@ -51,8 +50,7 @@ inline void WriteRunInfo(TFile* file, const std::string& tree_name,
   file->cd();
   file->Delete((tree_name + ";*").c_str());
   TTree tree(tree_name.c_str(),
-             "Simulation run conditions (key, value string pairs) -- see GitHub issue #6 item 1, "
-             "#11 item 1");
+             "Simulation run conditions (key, value string pairs)");
   std::string key, value;
   tree.Branch("key", &key);
   tree.Branch("value", &value);

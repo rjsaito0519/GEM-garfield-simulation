@@ -24,10 +24,7 @@
  *   holeOuterRadiusCm: seeds are placed on nRings evenly-spaced radii from
  *     0 to this radius, nSeedsPerRing points per ring (except r=0, one
  *     point only).
- *   nRings: default 4 (previously undocumented as optional -- the code
- *     always accepted omitting it, but this usage message used to list it
- *     as required with no default noted, which could read as a silent,
- *     unflagged fallback to a coarser-than-intended ring count).
+ *   nRings: default 4.
  *   stepCm: Euler step size [cm], default 1e-6 (0.01 um) -- much smaller
  *     than the hole (tens of um), matching the real per-collision step
  *     scale found in the SetCollisionSteps=1 diagnostic.
@@ -67,7 +64,7 @@ int main(int argc, char* argv[]) {
   if (argc < 6) {
     std::cout << "Usage: trace_field_lines <mesh/result dir> <topCuZCm> "
                  "<dielectricBottomZCm> <holeOuterRadiusCm> <nSeedsPerRing> "
-                 "<nRings> [stepCm] [maxSteps]\n";
+                 "[nRings] [stepCm] [maxSteps]\n";
     return 1;
   }
   const std::string meshDir = std::string(argv[1]) + "/";
@@ -89,7 +86,7 @@ int main(int argc, char* argv[]) {
   // geo.gas_material_index is read from the actual "Gas" physical group ID
   // the geometry builder wrote (model_info.hh), not hardcoded -- see that
   // struct's own comment and docs/pipeline_gotchas.md #8 (ComponentElmer
-  // subtracts 1 from mesh.names' 1-based body ID) and GitHub issue #6 item 3.
+  // subtracts 1 from mesh.names' 1-based body ID).
   ComponentElmer elm(meshDir + "mesh.header", meshDir + "mesh.elements",
                       meshDir + "mesh.nodes", meshDir + "dielectrics.dat",
                       meshDir + baseName + ".result", "cm");

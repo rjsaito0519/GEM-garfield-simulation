@@ -64,7 +64,7 @@ int main(int argc, char* argv[]) {
   // geo.gas_material_index is read from the actual "Gas" physical group ID
   // the geometry builder wrote (model_info.hh), not hardcoded -- see that
   // struct's own comment and docs/pipeline_gotchas.md #8 (ComponentElmer
-  // subtracts 1 from mesh.names' 1-based body ID) and GitHub issue #6 item 3.
+  // subtracts 1 from mesh.names' 1-based body ID).
   elm.SetMedium(geo.gas_material_index, &gas);
   elm.DriftMedium(geo.gas_material_index);
 

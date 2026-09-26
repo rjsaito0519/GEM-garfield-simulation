@@ -14,10 +14,10 @@
  * export_avalanche_trajectories.cpp may have written to the same file.
  * Also writes a "RunInfoEndpoints" TTree recording the run's actual
  * conditions (gas file, geometry, RNG seed, git commit, full
- * model_info.json, ...) -- see run_info.hh and GitHub issue #6 item 1 /
- * #11 item 1 (this macro's own tree name, distinct from
- * export_avalanche_trajectories.cpp's "RunInfoTrajectories", so the two
- * don't overwrite each other when run against the same output file).
+ * model_info.json, ...) -- see run_info.hh (this macro's own tree name,
+ * distinct from export_avalanche_trajectories.cpp's "RunInfoTrajectories",
+ * so the two don't overwrite each other when run against the same output
+ * file).
  *
  * The mesh/result base name is taken from the last path component of the
  * mesh directory (e.g. "single_gem_field" or "triple_gem_field"), matching
@@ -55,9 +55,8 @@
  *     finishing the current generation) -- so a run that hits this cap
  *     often has a downward bias on any measured transmission/collection
  *     fraction, not just a capped "gain" number. Found to be hit in the
- *     majority of events once Penning transfer was enabled (2026-09-24,
- *     GitHub issue #7 item 4) at the default 2000; raise this for a run
- *     where that bias matters.
+ *     majority of events once Penning transfer was enabled, at the default
+ *     2000; raise this for a run where that bias matters.
  */
 
 #include <cmath>
@@ -96,13 +95,12 @@ int main(int argc, char* argv[]) {
   }
   // Captured once here, before TApplication is constructed below: its
   // constructor is documented to strip any argv entries it recognizes as
-  // its own options, which can shift/mutate argv -- confirmed directly
-  // (2026-09-24, GitHub issue #6 item 1 work): a *second* argv[1] read
-  // after that point returned a different, wrong value even though this
-  // first read (and everything else in this function) uses the same
-  // argv[1] and worked fine. Every later use of "the mesh dir path as
-  // given on the command line" must go through this variable, not argv[1]
-  // directly.
+  // its own options, which can shift/mutate argv -- confirmed directly: a
+  // *second* argv[1] read after that point returned a different, wrong
+  // value even though this first read (and everything else in this
+  // function) uses the same argv[1] and worked fine. Every later use of
+  // "the mesh dir path as given on the command line" must go through this
+  // variable, not argv[1] directly.
   const std::string meshDirArg = argv[1];
   const std::string meshDir = meshDirArg + "/";
   const std::string baseName = std::filesystem::path(meshDirArg).filename().string();
@@ -124,15 +122,15 @@ int main(int argc, char* argv[]) {
   const std::string imgOutDir = argc > 12 ? std::string(argv[12]) + "/" : rootOutDir;
   // Optional: pre-extend MediumMagboltz's electron-collision-rate table up
   // front instead of letting it auto-extend in many small increments
-  // during the run (seen 2026-09-23 testing a 3x GEM-voltage diagnostic:
-  // electron energies routinely exceeded the table's default range, and
-  // each "Rate at X eV is not included... Increasing energy range" step
-  // is expensive when it happens hundreds of times over a run -- see
-  // docs/debugging_notes.md). 0 (default) leaves Magboltz's own
+  // during the run (seen testing a diagnostic with a much higher applied
+  // GEM voltage: electron energies routinely exceeded the table's default
+  // range, and each "Rate at X eV is not included... Increasing energy
+  // range" step is expensive when it happens hundreds of times over a run
+  // -- see docs/debugging_notes.md). 0 (default) leaves Magboltz's own
   // auto-extension behavior untouched.
   const double maxElectronEnergyEv = argc > 13 ? std::stod(argv[13]) : 0.0;
   // Explicit RNG seed, same convention as export_avalanche_trajectories.cpp
-  // -- see that macro's comment and GitHub issue #5 item 4 for why.
+  // -- see that macro's comment for why.
   const bool hasExplicitSeed = argc > 14;
   const unsigned int seed = hasExplicitSeed ? static_cast<unsigned int>(std::stoul(argv[14])) : 0;
   if (hasExplicitSeed) {
@@ -174,22 +172,20 @@ int main(int argc, char* argv[]) {
   // literature-sourced parameterization for this exact Ar/CH4 mixture at
   // our pressure (doi:10.1088/1748-0221/5/05/P05002; confirmed in source,
   // MediumGas::EnablePenningTransfer(), gives r~0.222, lambda=0 for 90/10
-  // Ar/CH4 at 1 atm) rather than an arbitrary guess. Enabled 2026-09-24
-  // (GitHub issue #7 item 3) after confirming no prior gain result
-  // (including the production 1.15x-voltage config) included it --
-  // absolute gain numbers from before this change are not directly
-  // comparable to ones from after it.
+  // Ar/CH4 at 1 atm) rather than an arbitrary guess. Note: absolute gain
+  // numbers computed without Penning transfer enabled are not directly
+  // comparable to gain numbers computed with it on.
   const bool penningEnabled = gas.EnablePenningTransfer();
   if (!penningEnabled) {
     std::cerr << "WARNING: EnablePenningTransfer() failed for this gas "
                  "composition -- proceeding without Penning transfer.\n";
   }
-  // The actual r/lambda values used, not just the enabled/disabled flag --
-  // GitHub issue #11 item 3: these came from Garfield++'s own built-in
-  // parameterization (EnablePenningTransfer()'s no-arg overload), which
-  // could in principle change with a future Garfield++ version even though
-  // our gas composition doesn't, so recording the value actually used each
-  // run (not just "Penning was on") matters for reproducibility.
+  // The actual r/lambda values used, not just the enabled/disabled flag:
+  // these came from Garfield++'s own built-in parameterization
+  // (EnablePenningTransfer()'s no-arg overload), which could in principle
+  // change with a future Garfield++ version even though our gas
+  // composition doesn't, so recording the value actually used each run
+  // (not just "Penning was on") matters for reproducibility.
   double penningR = 0., penningLambda = 0.;
   if (penningEnabled) {
     // MediumMagboltz declares its own GetPenningTransfer(size_t, ...)
@@ -203,7 +199,7 @@ int main(int argc, char* argv[]) {
   // geo.gas_material_index is read from the actual "Gas" physical group ID
   // the geometry builder wrote (model_info.hh), not hardcoded -- see that
   // struct's own comment and docs/pipeline_gotchas.md #8 (ComponentElmer
-  // subtracts 1 from mesh.names' 1-based body ID) and GitHub issue #6 item 3.
+  // subtracts 1 from mesh.names' 1-based body ID).
   ComponentElmer elm(meshDir + "mesh.header", meshDir + "mesh.elements",
                       meshDir + "mesh.nodes", meshDir + "dielectrics.dat",
                       meshDir + baseName + ".result", "cm");
@@ -228,11 +224,10 @@ int main(int argc, char* argv[]) {
   // single bad event cannot hang the whole run; GetAvalancheSize() still
   // reports whatever size it reached when cut off -- meaning that reported
   // "gain" is a truncated lower bound, not a genuine final size, for any
-  // event that hits this (tracked and flagged below, GitHub issue #5 item 1;
-  // CLI-configurable since GitHub issue #7 item 4, see this file's usage
-  // docstring -- default unchanged at 2000 for backward compatibility, but
-  // it turned out to be hit far more often once Penning transfer was
-  // enabled).
+  // event that hits this (tracked and flagged below; CLI-configurable, see
+  // this file's usage docstring -- default unchanged at 2000 for backward
+  // compatibility, but it turned out to be hit far more often once Penning
+  // transfer was enabled).
   const int kAvalancheSizeLimit = avalancheSizeLimit;
   aval.EnableAvalancheSizeLimit(kAvalancheSizeLimit);
 
@@ -250,8 +245,8 @@ int main(int argc, char* argv[]) {
   TTree endpointsTree("Endpoints", "Per-electron-endpoint avalanche data");
   // Disable ROOT's automatic mid-run TTree autosave -- see the identical
   // call in export_avalanche_trajectories.cpp for why (multi-cycle files
-  // intermittently unreadable by uproot, 2026-09-25). Endpoints is much
-  // smaller per-event than Trajectories so less likely to hit the autosave
+  // intermittently unreadable by uproot). Endpoints is much smaller
+  // per-event than Trajectories so less likely to hit the autosave
   // threshold in practice, but there is no reason to risk it here either.
   endpointsTree.SetAutoSave(0);
   int b_event, b_status;
@@ -274,18 +269,16 @@ int main(int argc, char* argv[]) {
   gains.reserve(nEvents);
   int nEventsAtCap = 0;
   for (int i = 0; i < nEvents; ++i) {
-    // Uniform-in-area sampling on the injection disk (r = R*sqrt(U), not
-    // r = R*U -- the latter is biased toward the center, see GitHub issue
-    // #5 item 5). Fixed 2026-09-24 with the user's explicit approval
-    // (issue #7 item 5 needs genuine collection-efficiency measurement,
-    // which requires a real upstream-area sampling, not the old near-axis-
-    // biased distribution the R*U formula gave); before this fix,
-    // injectionRadiusCm was kept tiny specifically to approximate
-    // near-axis injection despite the bias, so any result using a wider
-    // injectionRadiusCm together with the R*U formula would have been
-    // wrong. See also the injection *direction* comment below (still
-    // intentionally simplified, not meant to reproduce a real post-drift-
-    // diffusion angular distribution).
+    // r = R*sqrt(U) for genuine uniform-in-area sampling over the
+    // injection disk -- r = R*U (a naive-looking alternative) is biased
+    // toward the center and would undercount collection efficiency for
+    // anything but a near-axis injection radius. Because of that bias,
+    // injectionRadiusCm was historically kept tiny to approximate
+    // near-axis injection; a result using a wider injectionRadiusCm
+    // together with the R*U formula would be wrong. See also the
+    // injection *direction* comment below (still intentionally
+    // simplified, not meant to reproduce a real post-drift-diffusion
+    // angular distribution).
     const double r = injectionRadiusCm * std::sqrt(RndmUniform());
     const double phi = 2. * M_PI * RndmUniform();
     const double x0 = r * std::cos(phi);
@@ -293,13 +286,12 @@ int main(int argc, char* argv[]) {
 
     // Initial direction (0, 0, -1): pointing "downstream" (toward the pad
     // plane, i.e. decreasing z), matching a real drift electron's net
-    // motion. Passing (0, 0, 0) here -- as an earlier version of this macro
-    // did -- makes Garfield sample a *random* initial direction instead
-    // (see AvalancheElectron's doc comment), which showed up as most
-    // secondary electrons hitting the hole wall almost immediately: close
-    // injection with a random start, or distant injection giving diffusion
-    // more time to act, were both worse than injecting close with the
-    // correct drift direction.
+    // motion. Passing (0, 0, 0) instead makes Garfield sample a *random*
+    // initial direction (see AvalancheElectron's doc comment), which shows
+    // up as most secondary electrons hitting the hole wall almost
+    // immediately: close injection with a random start, or distant
+    // injection giving diffusion more time to act, are both worse than
+    // injecting close with the correct drift direction.
     aval.AvalancheElectron(x0, y0, zInjection, t0, e0, 0., 0., -1.);
     int ne = 0, ni = 0;
     aval.GetAvalancheSize(ne, ni);
@@ -330,7 +322,7 @@ int main(int argc, char* argv[]) {
   endpointsTree.Write();
 
   // Record the conditions this run actually used, alongside the data --
-  // see run_info.hh and GitHub issue #6 item 1.
+  // see run_info.hh.
   gem::WriteRunInfo(rootFile, "RunInfoEndpoints", {
       {"executable", "gem_avalanche"},
       {"git_commit_hash", GEM_GIT_COMMIT_HASH},
@@ -352,10 +344,10 @@ int main(int argc, char* argv[]) {
       {"y_half_cm", std::to_string(yHalfCm)},
       {"e0_ev", std::to_string(e0)},
       {"injection_radius_cm", std::to_string(injectionRadiusCm)},
-      // Not a CLI parameter (hardcoded downstream), but GitHub issue #11
-      // item 2 asked for injection direction to be recorded alongside
-      // position/radius -- (0,0,-1) matches AvalancheElectron()'s call
-      // below.
+      // Not a CLI parameter (hardcoded downstream); recorded alongside
+      // position/radius so the run's actual injection direction is
+      // captured in RunInfo too -- (0,0,-1) matches AvalancheElectron()'s
+      // call below.
       {"injection_direction", "0,0,-1"},
       {"max_electron_energy_ev", std::to_string(maxElectronEnergyEv)},
       {"avalanche_size_limit", std::to_string(kAvalancheSizeLimit)},
@@ -379,9 +371,9 @@ int main(int argc, char* argv[]) {
   // later absorbed by a wall/electrode), NOT a detector "effective gain"
   // (electrons actually reaching the readout/next stage) -- that has to be
   // computed separately from genuine plane crossings (see
-  // geometry/analyze_plane_crossings.py and docs/debugging_notes.md,
-  // GitHub issue #5 item 2). Printed as "avalanche size" below, not "gain",
-  // to avoid conflating the two.
+  // geometry/analyze_plane_crossings.py and docs/debugging_notes.md).
+  // Printed as "avalanche size" below, not "gain", to avoid conflating the
+  // two.
   double sum = 0., sumSq = 0.;
   for (const int g : gains) {
     sum += g;
@@ -392,9 +384,9 @@ int main(int argc, char* argv[]) {
   const double rms = std::sqrt(std::max(0., variance));
   // RMS (event-to-event spread) and the standard error on the mean
   // (RMS/sqrt(N), how precisely the mean itself is known) are different
-  // quantities -- the old "mean +/- sqrt(variance)" print conflated them,
-  // reading like an uncertainty on the mean when it was actually the
-  // distribution width (GitHub issue #5 item 3).
+  // quantities -- printing "mean +/- sqrt(variance)" alone would conflate
+  // them, reading like an uncertainty on the mean when it is actually the
+  // distribution width.
   const double meanStdErr = rms / std::sqrt(static_cast<double>(gains.size()));
   std::cout << "Mean avalanche size = " << mean << ", RMS = " << rms
             << ", standard error on the mean = " << meanStdErr

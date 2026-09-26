@@ -36,28 +36,26 @@ struct ModelGeometryInfo {
   double z_domain_max_cm;
   // ComponentElmer material index for the "Gas" physical group (see
   // docs/pipeline_gotchas.md #8: ComponentElmer subtracts 1 from
-  // mesh.names' 1-based body ID). Every macro used to hardcode this as the
-  // literal 0, relying on "Gas" always being the first addPhysicalGroup()
-  // call in geometry/*_field_model.py -- a real but silent fragility (see
-  // GitHub issue #6 item 3): reordering those calls would make every
-  // SetMedium(0, ...)/DriftMedium(0) call silently wrong (gotcha #8 again:
-  // this specific mistake doesn't crash, only the drift-medium status
-  // determination quietly breaks while raw field values stay correct).
+  // mesh.names' 1-based body ID). Hardcoding this as the literal 0 and
+  // relying on "Gas" always being the first addPhysicalGroup() call in
+  // geometry/*_field_model.py would be a real but silent fragility:
+  // reordering those calls would make every SetMedium(0, ...)/
+  // DriftMedium(0) call silently wrong (gotcha #8 again: this specific
+  // mistake doesn't crash, only the drift-medium status determination
+  // quietly breaks while raw field values stay correct).
   //
   // Read from model_info.json's "garfield_material_indices" block, written
   // by elmer/write_sif.py *after* ElmerGrid has run, from mesh.names'
   // actual (post-renumbering) body IDs -- NOT derived here from
   // "physical_group_ids" (the pre-ElmerGrid Gmsh tags model_info.json also
-  // carries). GitHub issue #6 item 3's original fix used those Gmsh tags
-  // directly, which happened to agree with mesh.names in every case seen
-  // so far but is not guaranteed to (ElmerGrid is documented, in
-  // write_sif.py's own module docstring, to renumber boundary physical
-  // groups into a compact range -- the same could happen to body groups);
-  // this was flagged as a live version of the same class of bug in GitHub
-  // issue #10 item 1. mesh.names, not the Gmsh-side tags, is this
-  // project's one authoritative source for post-ElmerGrid IDs everywhere
-  // else (write_sif.py's own Target Body/Boundary indices), so this field
-  // now follows that same rule.
+  // carries). Deriving it from those Gmsh tags directly would happen to
+  // agree with mesh.names in every case seen so far but is not guaranteed
+  // to (ElmerGrid is documented, in write_sif.py's own module docstring,
+  // to renumber boundary physical groups into a compact range -- the same
+  // could happen to body groups). mesh.names, not the Gmsh-side tags, is
+  // this project's one authoritative source for post-ElmerGrid IDs
+  // everywhere else (write_sif.py's own Target Body/Boundary indices), so
+  // this field follows that same rule.
   int gas_material_index;
 };
 
@@ -85,8 +83,8 @@ inline ModelGeometryInfo LoadModelGeometryInfo(const std::string& meshDirArg,
   if (!j.contains("garfield_material_indices")) {
     throw std::runtime_error(
         "model_info.json at " + path.string() +
-        " has no \"garfield_material_indices\" block -- it predates GitHub issue #10 item 1, "
-        "or elmer/write_sif.py has not been (re-)run against this mesh since. Re-run "
+        " has no \"garfield_material_indices\" block -- it was produced by an older "
+        "elmer/write_sif.py, or write_sif.py has not been (re-)run against this mesh since. Re-run "
         "write_sif.py (or the full geometry->Elmer pipeline) for this mesh; the gas material "
         "index is no longer derived from the pre-ElmerGrid Gmsh physical_group_ids here.");
   }
@@ -102,9 +100,9 @@ inline ModelGeometryInfo LoadModelGeometryInfo(const std::string& meshDirArg,
 }
 
 // The full, unparsed model_info.json content, for embedding verbatim into a
-// simulation output's RunInfo tree (see run_info.hh, GitHub issue #6 item 1)
-// -- kept as one opaque blob rather than flattened into individual RunInfo
-// keys because single-GEM and triple-GEM model_info.json have different
+// simulation output's RunInfo tree (see run_info.hh) -- kept as one opaque
+// blob rather than flattened into individual RunInfo keys because
+// single-GEM and triple-GEM model_info.json have different
 // "geometry" shapes (e.g. only the latter has a "layers" list), and a fixed
 // RunInfo schema would either need per-geometry-type branches or silently
 // drop fields. This is the single source of truth (this same file) already

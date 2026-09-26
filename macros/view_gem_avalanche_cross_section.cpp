@@ -76,7 +76,7 @@ int main(int argc, char* argv[]) {
   // geo.gas_material_index is read from the actual "Gas" physical group ID
   // the geometry builder wrote (model_info.hh), not hardcoded -- see that
   // struct's own comment and docs/pipeline_gotchas.md #8 (ComponentElmer
-  // subtracts 1 from mesh.names' 1-based body ID) and GitHub issue #6 item 3.
+  // subtracts 1 from mesh.names' 1-based body ID).
   ComponentElmer elm(meshDir + "mesh.header", meshDir + "mesh.elements",
                       meshDir + "mesh.nodes", meshDir + "dielectrics.dat",
                       meshDir + baseName + ".result", "cm");
@@ -98,12 +98,11 @@ int main(int argc, char* argv[]) {
   const double e0 = 0.1;
   for (int i = 0; i < nEvents; ++i) {
     // r = R*sqrt(U) for genuine uniform-in-area sampling on the injection
-    // disk, not r = R*U (biased toward the center) -- this macro was missed
-    // when gem_avalanche.cpp/export_avalanche_trajectories.cpp got this fix
-    // 2026-09-24 (GitHub issue #5 item 5). Low practical impact here (fixed
-    // radius of 5um for a qualitative cross-section PNG, not a collection-
+    // disk, not r = R*U (biased toward the center) -- see gem_avalanche.cpp's
+    // comment on the same pattern. Low practical impact here (fixed radius
+    // of 5um for a qualitative cross-section PNG, not a collection-
     // efficiency measurement), but there is no reason to leave a known,
-    // already-fixed-elsewhere bias in place.
+    // avoidable bias in place.
     const double r = 0.0005 * std::sqrt(RndmUniform());
     const double phi = 2. * M_PI * RndmUniform();
     const double x0 = r * std::cos(phi);

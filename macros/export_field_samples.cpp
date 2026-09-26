@@ -1,8 +1,8 @@
 /**
  * Sample an Elmer field map (single-GEM or the full 3-GEM stack -- this
  * macro is geometry-agnostic) on regular grids and dump the results to
- * JSON, for visualization/plot_triple_gem.py (see GitHub issue #3) to
- * render as vector arrows and as color-mapped slice planes.
+ * JSON, for visualization/plot_triple_gem.py to render as vector arrows
+ * and as color-mapped slice planes.
  *
  * Two versions of each are written: a coarse "full" grid spanning the whole
  * solved domain (context), and a fine "zoom" grid restricted to a thin slab
@@ -15,10 +15,9 @@
  *
  * Output: "<outDir>/<baseName>_field_{vectors,slice}_{full,zoom}.json"
  * (baseName-prefixed, like every other macro's output in this project --
- * fixed 2026-09-24, see docs/debugging_notes.md; previously these 4 files
- * had no baseName prefix at all, so switching models without re-running
- * this macro silently fed a stale/mismatched model's field data into the
- * visualization).
+ * see docs/debugging_notes.md. Without the prefix, switching models
+ * without re-running this macro would silently feed a stale/mismatched
+ * model's field data into the visualization).
  *
  * Usage: export_field_samples <mesh/result directory> <output directory>
  */
@@ -121,7 +120,7 @@ int main(int argc, char* argv[]) {
   // geo.gas_material_index is read from the actual "Gas" physical group ID
   // the geometry builder wrote (model_info.hh), not hardcoded -- see that
   // struct's own comment and docs/pipeline_gotchas.md #8 (ComponentElmer
-  // subtracts 1 from mesh.names' 1-based body ID) and GitHub issue #6 item 3.
+  // subtracts 1 from mesh.names' 1-based body ID).
   elm.SetMedium(geo.gas_material_index, &gas);
   // SetMedium() alone does not flag this material as a drift medium, which
   // would leave every sample's "status" at -5.

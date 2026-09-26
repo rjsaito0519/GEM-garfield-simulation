@@ -2,7 +2,7 @@
  * Export full per-point avalanche electron trajectories (not just start/end
  * points, unlike gem_avalanche.cpp's endpoint tree) to a ROOT TTree, for the
  * Python/PyVista visualization layer to overlay against geometry and field
- * maps (see GitHub issue #3).
+ * maps.
  *
  * Needs no ROOT graphics at all: AvalancheMicroscopic::GetElectrons()[i].path
  * is populated unconditionally (confirmed in the installed Garfield++
@@ -38,17 +38,15 @@
  *   avalancheSizeLimit: see gem_avalanche.cpp's usage docstring for why the
  *     default (2000) can significantly undercount transmission once
  *     Penning transfer is on -- same CLI-configurable cap here, same
- *     Garfield++ drop-without-recording behavior when hit (GitHub issue #7
- *     item 4).
+ *     Garfield++ drop-without-recording behavior when hit.
  *
  * Output: "<baseName>_avalanche.root", tree "Trajectories", branches
  *   event,track,x,y,z,t,energy,status. Also writes a "RunInfoTrajectories"
- *   tree (see run_info.hh, GitHub issue #6 item 1 / #11 item 1) recording
- *   this run's own conditions -- gem_avalanche.cpp writes its own
- *   "RunInfoEndpoints" to the same file under a different tree name
- *   specifically so the two don't overwrite each other (last-writer-wins
- *   was the original, now-fixed behavior when both used one shared
- *   "RunInfo" name).
+ *   tree (see run_info.hh) recording this run's own conditions --
+ *   gem_avalanche.cpp writes its own "RunInfoEndpoints" to the same file
+ *   under a different tree name specifically so the two don't overwrite
+ *   each other (a single shared "RunInfo" tree name would mean whichever
+ *   macro runs last silently overwrites the other's metadata).
  * (one entry per recorded path point; "track" is a per-event index into
  * AvalancheMicroscopic::GetElectrons(), not a globally unique ID -- pair
  * (event,track) to identify one electron's full path). "status" is that
@@ -115,24 +113,25 @@ int main(int argc, char* argv[]) {
   // Explicit RNG seed (default: none -- Garfield's own default engine,
   // Garfield::RandomEngineRoot, auto-seeds itself via ROOT's TRandom3::
   // SetSeed(0), which draws from time+PID and is independent per process;
-  // verified empirically across a real 10-job bsub batch, 2026-09-24, that
-  // this already gives genuinely independent event sequences per job with
-  // no explicit seeding). Pass an explicit seed for reproducibility (e.g.
+  // verified empirically across a real multi-job bsub batch that this
+  // already gives genuinely independent event sequences per job with no
+  // explicit seeding). Pass an explicit seed for reproducibility (e.g.
   // batch/run_avalanche_batch.py derives one per job from a shared base
   // seed + job index) instead of relying on that auto-seeding -- see
-  // docs/debugging_notes.md and GitHub issue #5 item 4.
+  // docs/debugging_notes.md.
   const bool hasExplicitSeed = argc > 14;
   const unsigned int seed = hasExplicitSeed ? static_cast<unsigned int>(std::stoul(argv[14])) : 0;
   if (hasExplicitSeed) {
     // NOT RandomEngineRoot(seed) (the parameterized constructor) -- that
-    // constructor has a real Garfield++ bug (confirmed 2026-09-23/24,
-    // isolated in a standalone reproducer): it calls SetSeed() via the base
-    // RandomEngine<> constructor *before* the derived class's own m_rng
-    // member is constructed, so the explicit seed is silently clobbered
-    // when m_rng's default constructor then runs (TRandom3's own fixed
-    // default seed, 4357) -- every seed value ends up producing the exact
-    // same sequence. Default-construct (correctly self-seeds AND properly
-    // constructs m_rng) then call SetSeed() as a separate step instead.
+    // constructor has a real Garfield++ bug (confirmed in the installed
+    // source, and isolated in a standalone reproducer): it calls SetSeed()
+    // via the base RandomEngine<> constructor *before* the derived class's
+    // own m_rng member is constructed, so the explicit seed is silently
+    // clobbered when m_rng's default constructor then runs (TRandom3's own
+    // fixed default seed, 4357) -- every seed value ends up producing the
+    // exact same sequence. Default-construct (correctly self-seeds AND
+    // properly constructs m_rng) then call SetSeed() as a separate step
+    // instead.
     RandomEngineRoot engine;
     engine.SetSeed(seed);
     Random::SetEngine(engine);
@@ -151,15 +150,14 @@ int main(int argc, char* argv[]) {
   // Penning transfer is a runtime-only MediumGas property, not persisted in
   // .gas files -- see gem_avalanche.cpp's comment on the same call for the
   // full explanation and the literature source for this gas mixture's
-  // parameters (GitHub issue #7 item 3).
+  // parameters.
   const bool penningEnabled = gas.EnablePenningTransfer();
   if (!penningEnabled) {
     std::cerr << "WARNING: EnablePenningTransfer() failed for this gas "
                  "composition -- proceeding without Penning transfer.\n";
   }
-  // See gem_avalanche.cpp's comment on the same pair of calls (GitHub
-  // issue #11 item 3) for why the actual r/lambda are recorded, not just
-  // whether Penning was enabled.
+  // See gem_avalanche.cpp's comment on the same pair of calls for why the
+  // actual r/lambda are recorded, not just whether Penning was enabled.
   double penningR = 0., penningLambda = 0.;
   if (penningEnabled) {
     // See gem_avalanche.cpp's comment on the same call for why the
@@ -170,7 +168,7 @@ int main(int argc, char* argv[]) {
   // geo.gas_material_index is read from the actual "Gas" physical group ID
   // the geometry builder wrote (model_info.hh), not hardcoded -- see that
   // struct's own comment and docs/pipeline_gotchas.md #8 (ComponentElmer
-  // subtracts 1 from mesh.names' 1-based body ID) and GitHub issue #6 item 3.
+  // subtracts 1 from mesh.names' 1-based body ID).
   ComponentElmer elm(meshDir + "mesh.header", meshDir + "mesh.elements",
                       meshDir + "mesh.nodes", meshDir + "dielectrics.dat",
                       meshDir + baseName + ".result", "cm");
@@ -194,10 +192,10 @@ int main(int argc, char* argv[]) {
   aval.EnableDriftLines();
   // Same safety cap as gem_avalanche.cpp -- see its comment on the same
   // call, and this file's usage docstring, for why. Recorded per event
-  // below (GitHub issue #5 item 1) so a scan that pushes gain high enough
-  // to actually hit this can be detected instead of silently truncating --
-  // routinely hit once Penning transfer was enabled (GitHub issue #7 item
-  // 4), hence this being CLI-configurable rather than a fixed constant.
+  // below so a scan that pushes gain high enough to actually hit this can
+  // be detected instead of silently truncating -- routinely hit once
+  // Penning transfer was enabled, hence this being CLI-configurable rather
+  // than a fixed constant.
   const std::size_t kAvalancheSizeLimit = avalancheSizeLimit;
   aval.EnableAvalancheSizeLimit(kAvalancheSizeLimit);
 
@@ -210,17 +208,15 @@ int main(int argc, char* argv[]) {
   // cumulative "cycles" of the same tree name in the file once the real,
   // explicit Write() below also runs). Each autosave cycle is complete and
   // correct on its own, and hadd already resolves to the latest one
-  // correctly, but a heavy event's file (300MB+, common with the current
-  // avalanche_size_limit=20000) can end up with a dozen-plus cycles, and
-  // that specific multi-cycle key-table layout intermittently makes uproot
-  // fail to read the file at all ("ValueError: read length must be
-  // non-negative or -1", not a real ROOT/hadd-side problem -- confirmed via
-  // `rootls`/`hadd` reading the same file fine -- but it broke this
-  // project's batch merge validation, which is uproot-based; real, hit
-  // 2026-09-25 regenerating triple_gem_field_v1.15x_n7 with the new
-  // avalanche_size_limit). One clean cycle per run avoids the whole class
-  // of issue; a run either finishes and writes it, or gets killed and
-  // writes nothing, which this project's batch tooling already treats as a
+  // correctly, but a heavy event's file (300MB+, e.g. with a large
+  // avalanche_size_limit) can end up with a dozen-plus cycles, and that
+  // specific multi-cycle key-table layout intermittently makes uproot fail
+  // to read the file at all ("ValueError: read length must be non-negative
+  // or -1") even though `rootls`/`hadd` read the same file fine -- this
+  // project's batch merge validation is uproot-based, so that failure mode
+  // matters here. One clean cycle per run avoids the whole class of issue;
+  // a run either finishes and writes it, or gets killed and writes
+  // nothing, which this project's batch tooling already treats as a
   // failed part either way (no partial-file fallback is expected).
   trajectoriesTree.SetAutoSave(0);
   int b_event;
@@ -240,9 +236,9 @@ int main(int argc, char* argv[]) {
   int nEventsAtCap = 0;
   for (int i = 0; i < nEvents; ++i) {
     // Same injection convention as gem_avalanche.cpp: direction (0,0,-1)
-    // (downstream), r = R*sqrt(U) for genuine uniform-in-area sampling on
-    // the injection disk -- see gem_avalanche.cpp's comment on the same
-    // pattern (GitHub issue #5 item 5, fixed 2026-09-24) for why.
+    // (downstream); r = R*sqrt(U), not r = R*U, for genuine uniform-in-area
+    // sampling over the injection disk -- see gem_avalanche.cpp's comment
+    // on the same pattern for the full reasoning.
     const double r = injectionRadiusCm * std::sqrt(RndmUniform());
     const double phi = 2. * M_PI * RndmUniform();
     const double x0 = r * std::cos(phi);
@@ -272,7 +268,7 @@ int main(int argc, char* argv[]) {
   trajectoriesTree.Write();
 
   // Record the conditions this run actually used, alongside the data --
-  // see run_info.hh and GitHub issue #6 item 1.
+  // see run_info.hh.
   gem::WriteRunInfo(rootFile, "RunInfoTrajectories", {
       {"executable", "export_avalanche_trajectories"},
       {"git_commit_hash", GEM_GIT_COMMIT_HASH},
@@ -296,8 +292,7 @@ int main(int argc, char* argv[]) {
       {"y_half_cm", std::to_string(yHalfCm)},
       {"e0_ev", std::to_string(e0)},
       {"injection_radius_cm", std::to_string(injectionRadiusCm)},
-      // See gem_avalanche.cpp's comment on the same entry (GitHub issue
-      // #11 item 2).
+      // See gem_avalanche.cpp's comment on the same entry.
       {"injection_direction", "0,0,-1"},
       {"avalanche_size_limit", std::to_string(kAvalancheSizeLimit)},
       {"n_events_at_avalanche_size_limit", std::to_string(nEventsAtCap)},
