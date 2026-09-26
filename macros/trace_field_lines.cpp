@@ -17,13 +17,17 @@
  *   - z < dielectricBottomZ - margin: reached the downstream gas
  *
  * Usage: trace_field_lines <mesh/result dir> <topCuZCm> <dielectricBottomZCm>
- *          <holeOuterRadiusCm> <nSeedsPerRing> <nRings> [stepCm] [maxSteps]
+ *          <holeOuterRadiusCm> <nSeedsPerRing> [nRings] [stepCm] [maxSteps]
  *   topCuZCm/dielectricBottomZCm: z bounds of the GEM foil [cm] (e.g. the
  *     GEM_100UM single-foil test's +-59um/-59um, in cm) -- seeds start
  *     just below topCuZCm and lines are classified against these bounds.
  *   holeOuterRadiusCm: seeds are placed on nRings evenly-spaced radii from
  *     0 to this radius, nSeedsPerRing points per ring (except r=0, one
  *     point only).
+ *   nRings: default 4 (previously undocumented as optional -- the code
+ *     always accepted omitting it, but this usage message used to list it
+ *     as required with no default noted, which could read as a silent,
+ *     unflagged fallback to a coarser-than-intended ring count).
  *   stepCm: Euler step size [cm], default 1e-6 (0.01 um) -- much smaller
  *     than the hole (tens of um), matching the real per-collision step
  *     scale found in the SetCollisionSteps=1 diagnostic.
