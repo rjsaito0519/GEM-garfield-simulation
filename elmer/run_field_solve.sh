@@ -9,7 +9,7 @@
 #   -- see docs/reference.md "出力ディレクトリ構成"). preconditioner/
 #   max_iterations are forwarded to write_sif.py (default ILU2/20000) -- see
 #   that script's own usage message for why/when to override (large-mesh
-#   ILU2 integer overflow, docs/debugging_notes.md 2026-09-24).
+#   ILU2 integer overflow, docs/debugging_notes.md).
 #
 # Elmer's env vars are set here explicitly rather than relying on ~/.bashrc,
 # which no longer exports them by default (see README.md "実行環境").

@@ -8,17 +8,17 @@ Avalanche simulation is embarrassingly parallel across primary events (no
 shared state), so this is a safe, simple way to use KEKCC's batch farm
 instead of one long serial job. Each job gets a distinct, non-overlapping
 slice of the total event count (via export_avalanche_trajectories'
-eventOffset argument, added 2026-09-24 alongside this script) so the
-per-job output files can be hadd'd together afterward without colliding
-(event,track) keys -- every downstream analysis script in this project
-treats (event,track) as a globally unique identifier.
+eventOffset argument) so the per-job output files can be hadd'd together
+afterward without colliding (event,track) keys -- every downstream
+analysis script in this project treats (event,track) as a globally unique
+identifier.
 
 IMPORTANT: this script only *submits real bsub jobs* when run without
---dry-run. Per this project's global safety rules, batch job submission is
-hands-off by default -- only actually submit (i.e. run this without
---dry-run) when the user has explicitly asked for it at that time. Always
-sanity-check with --dry-run first, which prints exactly what would be
-submitted/merged without touching bsub or the LSF queue at all.
+--dry-run. Batch job submission is a shared-cluster resource commitment and
+should be a deliberate, explicit step, not a side effect of testing this
+script -- always sanity-check with --dry-run first, which prints exactly
+what would be submitted/merged without touching bsub or the LSF queue at
+all.
 
 Usage:
     python3 run_avalanche_batch.py <mesh/result dir> <.gas file> <n_events_total>
@@ -34,17 +34,16 @@ given -- needed to run more than one batch against the same mesh, e.g. a
 parameter scan, without each one overwriting the last), exactly as a normal serial
 export_avalanche_trajectories run would produce (so nothing downstream
 needs to change), plus a small "BatchMergeProvenance" tree recording which
-parts/seeds/offsets went into it (GitHub issue #9 item 4). Per-job
-intermediates (partial ROOT files, bsub logs) are kept under
+parts/seeds/offsets went into it. Per-job intermediates (partial ROOT
+files, bsub logs) are kept under
 results/root/.batch_tmp/<baseName>/<run_id>/ for debugging, not deleted
 automatically -- run_id is a fresh timestamp every invocation, so a failed
-run's leftovers can never get merged into a later run's output (GitHub
-issue #9 item 1). The merge only happens if every single job finishes
-LSF-status DONE and each part's own RunInfo matches what this run actually
-submitted for it (seed/event_offset/n_events, GitHub issue #9 items 2-3);
-otherwise no "final" output is written at all, and the run must be
-re-submitted (getting its own fresh run_id) after the underlying problem
-is fixed.
+run's leftovers can never get merged into a later run's output. The merge
+only happens if every single job finishes LSF-status DONE and each part's
+own RunInfo matches what this run actually submitted for it
+(seed/event_offset/n_events); otherwise no "final" output is written at
+all, and the run must be re-submitted (getting its own fresh run_id) after
+the underlying problem is fixed.
 """
 
 import argparse
@@ -62,24 +61,23 @@ import bsub_utils
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MACRO_BINARY = os.path.join(REPO_ROOT, "macros", "build", "export_avalanche_trajectories")
 RESULTS_ROOT_DIR = os.path.join(REPO_ROOT, "results", "root")
-DEFAULT_QUEUE = "l"  # 1200 min CPU limit vs queue "s"'s 150 min (both confirmed
-# Open:Active via `bqueues`, 2026-09-24). Changed from "s" 2026-09-26: with
-# avalanche_size_limit raised to 20000 (issue #12), heavy events routinely
-# exceed 150 CPU-min, so submitting to "s" first now means paying for a
-# guaranteed-to-fail wait before retrying on "l" anyway (hit twice, 9x9 and
-# n7 regeneration) -- go straight to "l".
+DEFAULT_QUEUE = "l"  # 1200 min CPU limit vs queue "s"'s 150 min (both
+# Open:Active -- check via `bqueues`). With avalanche_size_limit set high
+# enough to allow large events, heavy events routinely exceed 150 CPU-min,
+# so submitting to "s" first just means paying for a guaranteed-to-fail
+# wait before retrying on "l" anyway -- go straight to "l".
 
 
 def _read_run_info(root_path: str) -> dict[str, str]:
     """The (key, value) pairs from a part file's own run-info tree, as a
     plain dict (see macros/run_info.hh) -- used to cross-check that a part
-    file actually matches what *this* run expected of it (GitHub issue #9
-    item 3), not just that some file happens to exist at that path.
+    file actually matches what *this* run expected of it, not just that
+    some file happens to exist at that path.
 
     Prefers "RunInfoTrajectories" but falls back to the legacy shared
-    "RunInfo" name it replaced (GitHub issue #11 item 1): a part whose job
-    was already running when a mid-batch binary rebuild picked up that
-    rename still has the old name (real, hit 2026-09-25, the 9x9 batch)."""
+    "RunInfo" name it replaced: a part whose job was already running when a
+    mid-batch binary rebuild picked up that rename still writes the old
+    tree name, so both must be checked."""
     with uproot.open(root_path) as f:
         for name in ("RunInfoTrajectories", "RunInfo"):
             if name in f:
@@ -92,18 +90,16 @@ def _validate_part(job: dict) -> list[str]:
     """Problems found cross-checking a part's own RunInfo against what this
     run actually submitted for it -- empty list means it's consistent.
     Missing RunInfo entirely (an older export_avalanche_trajectories build)
-    is reported as a problem too, not silently skipped, since GitHub issue
-    #9 wants this checked whenever it's possible to check.
+    is reported as a problem too, not silently skipped, so a merge never
+    proceeds on unverifiable input.
 
     Deliberately does NOT check rng_seed against job["seed"]: with
-    --resume-run-id/--retry-indices (added for GitHub issue #12 item 3's
-    9x9 batch), a retry invocation that doesn't repeat the exact same
-    --base-seed gets a different (still perfectly valid, still unique
-    enough) seed than the original attempt used for that same index --
-    real, hit 2026-09-25 re-generating triple_gem_field_v1.15x_n7 with the
-    new avalanche_size_limit. The seed's only job is uniqueness/
-    reproducibility, not matching a specific formula, so checking it here
-    would reject genuinely-fine retried parts. event_offset/n_events (which
+    --resume-run-id/--retry-indices, a retry invocation that doesn't repeat
+    the exact same --base-seed gets a different (still perfectly valid,
+    still unique enough) seed than the original attempt used for that same
+    index. The seed's only job is uniqueness/reproducibility, not matching
+    a specific formula, so checking it here would reject genuinely-fine
+    retried parts. event_offset/n_events (which
     events this part actually covers) and avalanche_size_limit/
     geometry_type (which run parameters it used) are the checks that
     actually catch a part not belonging in this merge, and are unaffected
@@ -165,25 +161,25 @@ def main() -> None:
         help="Explicit RNG base seed; job i uses (base_seed + i). Defaults to a "
              "time-derived value, printed below, if not given. Each job's actual "
              "seed is passed to export_avalanche_trajectories' seed argument -- "
-             "see GitHub issue #5 item 4 and that macro's own comment for why this "
-             "is needed instead of relying on its per-process auto-seeding.",
+             "see that macro's own comment for why this is needed instead of "
+             "relying on its per-process auto-seeding.",
     )
     parser.add_argument(
         "--avalanche-size-limit", type=int, default=2000,
         help="export_avalanche_trajectories' EnableAvalancheSizeLimit() argument "
              "(default 2000, matching that macro's own default). A capped event's "
              "still-unprocessed electrons are dropped with no trajectory recorded at "
-             "all, biasing measured transmission fractions downward -- found to be "
-             "hit routinely once Penning transfer was enabled (GitHub issue #7 item "
-             "4); raise this for a run where that bias matters.",
+             "all, biasing measured transmission fractions downward -- hit routinely "
+             "once Penning transfer is enabled; raise this for a run where that bias "
+             "matters.",
     )
     parser.add_argument(
         "--mem-mb", type=int, default=None,
         help="Explicit bsub memory request in MB (both -M and -R rusage[mem=...]). "
              "Every queue on this cluster has a hard per-slot MEMLIMIT of 4GB "
-             "(confirmed 2026-09-24, bqueues -l) that bsub itself refuses to exceed "
-             "via -M at the default 1 slot -- use --slots-per-job instead for a job "
-             "that needs more than 4GB; this is for a value under that per-slot cap.",
+             "(check via bqueues -l) that bsub itself refuses to exceed via -M at "
+             "the default 1 slot -- use --slots-per-job instead for a job that "
+             "needs more than 4GB; this is for a value under that per-slot cap.",
     )
     parser.add_argument(
         "--slots-per-job", type=int, default=1,
@@ -191,9 +187,8 @@ def main() -> None:
              "cluster the per-job memory budget scales with slot count (N x the "
              "queue's per-slot MEMLIMIT, 4GB), so this is how to get a large-mesh "
              "avalanche job enough headroom. A triple_gem_field_v1.15x_n9 (9.6M-node) "
-             "job needs ~5.6GB RSS (measured locally, 2026-09-24) -- try 2 first, "
-             "raise to 3/4/... if a job still gets TERM_MEMLIMIT-killed. Default 1 "
-             "(no change from before this option existed).",
+             "job needs ~5.6GB RSS (measured locally) -- try 2 first, raise to "
+             "3/4/... if a job still gets TERM_MEMLIMIT-killed. Default 1.",
     )
     parser.add_argument(
         "--output-suffix", default="",
@@ -225,15 +220,15 @@ def main() -> None:
              "under that run_id and its final status is read directly from its existing "
              "bsub.log instead of being resubmitted -- for recovering a batch where some "
              "jobs genuinely failed (e.g. TERM_CPULIMIT on a queue too small for a few "
-             "heavy events, GitHub issue #12 item 3, 2026-09-25) while most parts already "
-             "finished successfully, without re-running or re-paying for the good ones.",
+             "heavy events) while most parts already finished successfully, without "
+             "re-running or re-paying for the good ones.",
     )
     args = parser.parse_args()
 
-    # Explicit, loud validation up front (GitHub issue #9) -- argparse's
-    # type=int/float already rejects non-numeric input, but not <= 0, which
-    # would otherwise surface later as a confusing failure deep in
-    # _split_events or bsub itself.
+    # Explicit, loud validation up front -- argparse's type=int/float
+    # already rejects non-numeric input, but not <= 0, which would
+    # otherwise surface later as a confusing failure deep in _split_events
+    # or bsub itself.
     if args.njobs <= 0:
         parser.error(f"--njobs must be > 0, got {args.njobs}")
     if args.n_events_total <= 0:
@@ -262,14 +257,13 @@ def main() -> None:
         parser.error("n_events_total is too small to split into any non-empty chunk")
 
     # Run-scoped part directory, not a bare .batch_tmp/<baseName>/ reused
-    # across every invocation (GitHub issue #9): reusing the same partXXX/
-    # paths meant a failed job's *previous* run's ROOT file could still be
-    # sitting there when this run's merge step only checks file existence,
-    # not which run actually produced it -- confirmed happening for real
-    # 2026-09-25 (triple_gem_field_v1.15x_n9: 6/10 jobs EXITed but the
-    # merge went ahead anyway using whatever files existed, some left over
-    # from an earlier failed attempt; the resulting file was quarantined,
-    # not used). A fresh timestamped subdirectory per invocation means a
+    # across every invocation: reusing the same partXXX/ paths would mean a
+    # failed job's *previous* run's ROOT file could still be sitting there
+    # when this run's merge step only checks file existence, not which run
+    # actually produced it -- e.g. a 10-job batch where 6 jobs EXITed could
+    # still merge using leftover files from an earlier failed attempt at
+    # those same paths, producing a "successful"-looking file built from
+    # stale data. A fresh timestamped subdirectory per invocation means a
     # failed run can never contaminate a later one, and nothing here is
     # ever silently reused across runs.
     if args.resume_run_id is not None:
@@ -287,10 +281,10 @@ def main() -> None:
 
     # Each job's own explicit seed, base_seed + job index -- NOT relying on
     # export_avalanche_trajectories' per-process auto-seeding, even though
-    # that was verified independent across jobs (2026-09-24): explicit
-    # per-job seeds make a batch run reproducible (rerun with the same
-    # --base-seed to get bit-identical results) and don't depend on that
-    # auto-seeding behavior continuing to hold.
+    # that has been verified independent across jobs: explicit per-job
+    # seeds make a batch run reproducible (rerun with the same --base-seed
+    # to get bit-identical results) and don't depend on that auto-seeding
+    # behavior continuing to hold.
     base_seed = args.base_seed if args.base_seed is not None else int(time.time())
     print(f"base_seed={base_seed} (job i uses seed {base_seed}+i)")
 
@@ -390,14 +384,13 @@ def main() -> None:
             return j["_preresolved_status"]
         return final_statuses.get(j["job_id"], "UNKNOWN")
 
-    # Strict DONE-only merge condition (GitHub issue #9 item 2): a job
-    # that's EXIT, or UNKNOWN (aged out of `bjobs -a` before we could
-    # confirm which -- ambiguous, not "probably fine"), blocks the merge
-    # entirely. A merge that silently went ahead using whatever part files
-    # happened to exist, regardless of job status, is exactly how a stale
-    # or truncated part got folded into a "successful" output for real on
-    # 2026-09-25 -- no "final" file gets written at all now unless every
-    # single part is confirmed DONE.
+    # Strict DONE-only merge condition: a job that's EXIT, or UNKNOWN (aged
+    # out of `bjobs -a` before we could confirm which -- ambiguous, not
+    # "probably fine"), blocks the merge entirely. A merge that silently
+    # went ahead using whatever part files happened to exist, regardless of
+    # job status, is exactly how a stale or truncated part can get folded
+    # into a "successful"-looking output -- no "final" file gets written at
+    # all unless every single part is confirmed DONE.
     not_done = [j for j in jobs if _job_status(j) != "DONE"]
     if not_done:
         print(f"\nERROR: {len(not_done)}/{len(jobs)} job(s) did not finish DONE -- refusing to "
@@ -417,10 +410,10 @@ def main() -> None:
         sys.exit(1)
 
     # Cross-check each part's own RunInfo against what this run actually
-    # submitted for it (GitHub issue #9 item 3) -- catches a part file that
-    # exists and is DONE but somehow doesn't match (e.g. a macro bug, or a
-    # future change to this script that breaks the seed/offset bookkeeping)
-    # before it gets folded into the merged output.
+    # submitted for it -- catches a part file that exists and is DONE but
+    # somehow doesn't match (e.g. a macro bug, or a future change to this
+    # script that breaks the seed/offset bookkeeping) before it gets folded
+    # into the merged output.
     inconsistent = {}
     for j in jobs:
         problems = _validate_part(j)
@@ -433,28 +426,27 @@ def main() -> None:
             print(f"  job {idx:3d}: {'; '.join(problems)}")
         sys.exit(1)
 
-    # Provenance (GitHub issue #9 item 4): which parts, from which run,
-    # under which batch parameters, actually went into this merged file --
-    # its own tree rather than folded into "RunInfoTrajectories" so it
-    # doesn't collide with (or get overwritten by) the per-part RunInfo
-    # trees export_avalanche_trajectories itself already writes there.
+    # Provenance: which parts, from which run, under which batch
+    # parameters, actually went into this merged file -- its own tree
+    # rather than folded into "RunInfoTrajectories" so it doesn't collide
+    # with (or get overwritten by) the per-part RunInfo trees
+    # export_avalanche_trajectories itself already writes there.
     #
     # Written into a small standalone temp file and folded in via `hadd`
     # itself, NOT appended after the fact with `uproot.update()` on the
     # merged file: for a large collisionSteps=1-type merge (Trajectories
-    # tree in the multi-GB range, file >2GB), uproot's writer hit
+    # tree in the multi-GB range, file >2GB), uproot's writer can hit
     # `struct.error: 'i' format requires -2147483648 <= number <= 2147483647`
-    # trying to append a new key past the 2GB offset (2026-09-25). `hadd` is
-    # ROOT-native and already handles >2GB output correctly (this exact file
-    # merged fine before the provenance step), so let it do the writing
+    # trying to append a new key past the 2GB offset. `hadd` is ROOT-native
+    # and already handles >2GB output correctly, so let it do the writing
     # instead of uproot.
     #
     # Also written with `mktree` (explicit classic TTree), not the
     # dict-assignment `f["name"] = {...}` shortcut: since uproot 5.7.0 that
-    # shortcut defaults to writing an RNTuple instead. `hadd`'s RNTuple
-    # merge support crashed outright (SIGABRT in RNTupleMerger, 2026-09-25)
-    # when folding a dict-assigned RNTuple into this file. A classic TTree
-    # is also consistent with every other tree in this project (this is a
+    # shortcut defaults to writing an RNTuple instead, and `hadd`'s RNTuple
+    # merge support can crash outright (SIGABRT in RNTupleMerger) when
+    # folding a dict-assigned RNTuple into this file. A classic TTree is
+    # also consistent with every other tree in this project (this is a
     # ROOT/Garfield++ project -- TTree is the idiomatic format throughout,
     # not RNTuple) and merges cleanly.
     # The real per-part seed, read back from each part's own RunInfo, NOT
@@ -462,15 +454,13 @@ def main() -> None:
     # index), and with --resume-run-id/--retry-indices, an invocation that
     # doesn't repeat the exact same --base-seed gets a different (still
     # valid) base_seed each time it runs, including for parts that were
-    # never resubmitted. Writing job["seed"] here silently recorded the
+    # never resubmitted. Writing job["seed"] here would silently record the
     # WRONG seed for every untouched part whenever a later merge-only pass
-    # recomputed a fresh base_seed -- real, confirmed 2026-09-26 in
-    # triple_gem_field_v1.15x_n7_avalanche.root's BatchMergeProvenance
-    # (every part showed one contiguous fake seed range that matched
-    # neither the original nor the retried jobs' real embedded rng_seed).
-    # _validate_part already deliberately doesn't check rng_seed for this
-    # same reason (see its docstring) -- provenance must still report the
-    # true value, just not gate the merge on it matching a formula.
+    # recomputed a fresh base_seed, since every part would then show a seed
+    # from that recomputed range instead of the one its own job actually
+    # used. _validate_part already deliberately doesn't check rng_seed for
+    # this same reason (see its docstring) -- provenance must still report
+    # the true value, just not gate the merge on it matching a formula.
     actual_seeds = [int(_read_run_info(j["part_root_path"])["rng_seed"]) for j in jobs]
 
     provenance_path = os.path.join(batch_tmp_dir, "provenance.root")

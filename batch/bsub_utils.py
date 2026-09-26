@@ -1,23 +1,18 @@
 """Minimal LSF (bsub/bjobs) submission + polling helpers for parallelizing
 this project's embarrassingly-parallel avalanche runs across KEKCC batch
-jobs (see GitHub issue #2 discussion, 2026-09-24, and
-docs/pipeline_gotchas.md).
+jobs (see docs/pipeline_gotchas.md).
 
 Deliberately much smaller than a general-purpose run manager: this project
 only ever needs "submit N independent shell commands, wait for all of them,
 then do something with the outputs" -- not staging, DST chaining, or job
-priorities. Modeled loosely on the batch-status-polling idea in
-~/analyzer/JPARC2025E72/runmanager/module/bjobmanager.py (poll `bjobs -a`
-once and look up many job IDs in the cached result, instead of one `bjobs
-<id>` subprocess per job -- the latter doesn't scale past a handful of
-jobs), but without that framework's DST/analyzer-specific run-list schema,
-HSM staging, or logging config, none of which apply here.
+priorities. Status polling caches one `bjobs -a` snapshot and looks up
+every job ID against it, instead of running one `bjobs <id>` subprocess
+per job -- the latter doesn't scale past a handful of jobs.
 
-IMPORTANT: submitting a real bsub job is a batch-job submission -- per this
-project's own global safety rules, that should only happen when the user
-explicitly asks for it at that moment, not on this tool's own initiative.
-Callers (e.g. run_avalanche_batch.py) should support --dry-run and default
-to it, or otherwise make submission an explicit, deliberate step.
+IMPORTANT: submitting a real bsub job commits a shared-cluster batch
+resource. Callers (e.g. run_avalanche_batch.py) should support --dry-run
+and default to it, or otherwise make submission an explicit, deliberate
+step rather than a side effect of testing this code.
 """
 
 from __future__ import annotations
@@ -42,25 +37,22 @@ def status_from_log(log_path: str) -> str | None:
     header, or None if the header isn't there yet (job not actually
     finished) or the log doesn't exist. Unlike `bjobs -a`, a local log file
     never ages out -- this is the fallback for BJobStatusCache.get_status
-    when a job has disappeared from `bjobs -a`'s retained history (real,
-    observed 2026-09-25: a 50-job batch against the 9x9 mesh had 22/50
-    jobs finish successfully -- confirmed by this exact log header -- but
-    fall out of `bjobs -a` before wait_all's polling loop noticed, because
-    the loop keeps running for as long as the *slowest* job in the batch
-    takes, well past bjobs -a's retention window for the fast ones. Before
-    this fix, those 22 genuinely-successful jobs were reported "UNKNOWN"
-    and the batch's strict DONE-only merge gate (GitHub issue #9 item 2)
-    correctly refused to merge -- correctly conservative, but needlessly
-    so, since the data was fine).
+    when a job has disappeared from `bjobs -a`'s retained history: a long
+    batch's polling loop runs for as long as its *slowest* job takes, which
+    can be well past bjobs -a's retention window for jobs that finished
+    early, so a fast, genuinely-successful job can silently fall out of
+    `bjobs -a` before the loop ever observes it as DONE. Without this
+    fallback such a job reads as "UNKNOWN", and a strict DONE-only merge
+    gate would then refuse to merge a batch that actually finished fine.
 
     Uses the LAST header in the file, not the first: `bsub -o <path>`
     APPENDS rather than truncates when a job is resubmitted against a log
     path that already has content from an earlier attempt at that same
-    path (real, hit 2026-09-25 retrying 8 TERM_CPULIMIT-killed 9x9 jobs via
-    run_avalanche_batch.py's --retry-indices, which deliberately reuses
-    each part's original log_path -- reading only the first 2000 bytes
-    found the ORIGINAL failed job's "Exited" header and reported the
-    retried, actually-successful job as EXIT again).
+    path -- e.g. run_avalanche_batch.py's --retry-indices deliberately
+    reuses each part's original log_path, so reading only the first header
+    (or only the first N bytes) would find the ORIGINAL failed job's
+    "Exited" header and report the retried, actually-successful job as
+    EXIT again.
     """
     try:
         with open(log_path) as f:
@@ -75,13 +67,11 @@ def status_from_log(log_path: str) -> str | None:
 
 def build_login_shell_command(shell_command: str) -> list[str]:
     """Wrap a shell command string to run inside a fresh login shell
-    (`bash -lc`), so it goes through ~/.bashrc's LSF-batch-job branch
-    (`$LSB_JOBID` set -> skip the node-local envfs mount, fall back to the
-    canonical ~/local/root/6.40.04 etc. paths -- see
-    ~/local/envfs_README.md) rather than depending on whatever environment
-    happened to be inherited from the submitting shell, which may reference
-    a node-local /tmp mount that doesn't exist on the compute node the job
-    actually lands on.
+    (`bash -lc`), so a batch job resolves its own environment/paths (via
+    whatever this account's shell startup files set up) instead of
+    depending on whatever environment happened to be inherited from the
+    submitting shell -- which may reference a node-local mount or cache
+    that doesn't exist on the compute node the job actually lands on.
     """
     return ["bash", "-lc", shell_command]
 
@@ -95,11 +85,11 @@ def submit(
     `bsub -q <queue> -o <log_path>`, running it inside a login shell (see
     build_login_shell_command). Returns the parsed LSF job id.
 
-    Every queue on this cluster was confirmed 2026-09-24 to have a hard
-    per-slot MEMLIMIT of 4GB (`bqueues -l <queue>`) that `-M` cannot exceed
-    at n=1 -- bsub itself rejects a too-high -M with "MEMLIMIT: Cannot
-    exceed queue's hard limit(s)". A triple_gem_field_v1.15x_n9 (9.6M-node)
-    avalanche job needs ~5.6GB RSS (measured locally), already over that.
+    Every queue on this cluster has a hard per-slot MEMLIMIT of 4GB (check
+    via `bqueues -l <queue>`) that `-M` cannot exceed at n=1 -- bsub itself
+    rejects a too-high -M with "MEMLIMIT: Cannot exceed queue's hard
+    limit(s)". A triple_gem_field_v1.15x_n9 (9.6M-node) avalanche job needs
+    ~5.6GB RSS, already over that limit.
 
     n_slots: request this many job slots (`-n <n_slots> -R "span[hosts=1]"`,
     all on one host since this is a single-process job, not real MPI/thread

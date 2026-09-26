@@ -25,7 +25,7 @@ import sys
 # docs/reference.md "出力ディレクトリ構成" for what belongs in each subdir.
 # mesh.names/dielectrics.dat/.sif live in the ElmerGrid-created MESH_DIR
 # subdirectory; model_info.json is a sibling under JSON_DIR, not the same
-# directory (unlike this project's original geometry/output/ layout).
+# directory.
 REPO_ROOT = os.path.join(os.path.dirname(__file__), "..")
 MESH_DIR = os.path.join(REPO_ROOT, "results", "mesh")
 JSON_DIR = os.path.join(REPO_ROOT, "results", "json")
@@ -34,16 +34,16 @@ JSON_DIR = os.path.join(REPO_ROOT, "results", "json")
 # Body names allowed to silently get relative permittivity 1.0 -- must stay
 # an explicit, deliberate allowlist (physically, only vacuum/gas has
 # epsilon_r == 1 by definition), never a fallback default. See
-# resolve_body_permittivities() and GitHub issue #6 item 4: an unrecognized
-# material name silently defaulting to epsilon_r = 1 would be a silent
-# physics bug once Glass/Glue/coating materials get added.
+# resolve_body_permittivities(): an unrecognized material name silently
+# defaulting to epsilon_r = 1 would be a silent physics bug once
+# Glass/Glue/coating materials get added.
 _VACUUM_LIKE_BODY_NAMES = {"Gas"}
 
 
 def resolve_body_permittivities(body_ids: dict[str, int], model_info: dict) -> dict[str, float]:
     """Map every body name mesh.names actually defines (for this mesh_name)
     to a relative permittivity, erroring on anything not explicitly known
-    instead of silently defaulting to 1.0 (GitHub issue #6 item 4)."""
+    instead of silently defaulting to 1.0."""
     known = {
         "Dielectric": model_info["dielectric_relative_permittivity"],
         "Copper": model_info["copper_relative_permittivity"],
@@ -60,8 +60,7 @@ def resolve_body_permittivities(body_ids: dict[str, int], model_info: dict) -> d
                 "no relative permittivity defined for it. Add it explicitly to "
                 "write_sif.py's resolve_body_permittivities() (or to "
                 "_VACUUM_LIKE_BODY_NAMES if it is genuinely vacuum/gas with epsilon_r "
-                "== 1) instead of letting it silently default to 1.0 -- see GitHub "
-                "issue #6 item 4."
+                "== 1) instead of letting it silently default to 1.0."
             )
     return result
 
@@ -130,20 +129,19 @@ def parse_mesh_names(mesh_names_path: str) -> tuple[dict[str, int], dict[str, in
     return body_ids, boundary_ids
 
 
-# ILU2/20000 has been the default since 5cfd9cec (2026-09-23): ILU1/2000
-# failed to converge on the full 3-GEM mesh at high diagnostic voltage
-# multipliers (1.5-3x). But ILU2's incomplete-LU factorization can itself
-# fail outright on a large mesh with a *different* error -- confirmed
-# 2026-09-24 (docs/debugging_notes.md) on a 7x7-tiled, 5.4M-node mesh:
-# "CRS_IncompleteLU: Number of nonzeros larger than HUGE(Integer)" (a
-# 32-bit integer overflow in Elmer's ILU2 implementation, not a
-# convergence problem). Verified ILU1/2000 converges cleanly (48
-# iterations) on that same large mesh at the realistic 1.15x production
-# voltage, so which preconditioner is actually needed depends on both
-# mesh size and voltage regime -- exposed as a CLI override rather than
-# hardcoded, so a large-tiling build isn't stuck picking one over the
-# other project-wide. Default stays ILU2/20000 (unchanged behavior for
-# every existing mesh) unless overridden.
+# ILU2/20000 is the default: ILU1/2000 fails to converge on the full 3-GEM
+# mesh at high diagnostic voltage multipliers (1.5-3x). But ILU2's
+# incomplete-LU factorization can itself fail outright on a large mesh with
+# a *different* error -- seen (see docs/debugging_notes.md) on a 7x7-tiled,
+# 5.4M-node mesh: "CRS_IncompleteLU: Number of nonzeros larger than
+# HUGE(Integer)" (a 32-bit integer overflow in Elmer's ILU2 implementation,
+# not a convergence problem). ILU1/2000 converges cleanly (48 iterations)
+# on that same large mesh at the realistic 1.15x production voltage, so
+# which preconditioner is actually needed depends on both mesh size and
+# voltage regime -- exposed as a CLI override rather than hardcoded, so a
+# large-tiling build isn't stuck picking one over the other project-wide.
+# Default stays ILU2/20000 (unchanged behavior for every existing mesh)
+# unless overridden.
 def _solver_block(preconditioner: str, max_iterations: int) -> str:
     return f"""\
 Solver 1
@@ -211,7 +209,7 @@ def build_sif_text(
         # No .get(name, 1.0) fallback here deliberately -- body_permittivities
         # must already cover every body name (resolve_body_permittivities
         # errors otherwise), so a missing key here is a real bug, not a case
-        # to paper over (GitHub issue #6 item 4).
+        # to paper over.
         eps = body_permittivities[name]
         blocks.append(f'Material {i}\n  Name = "{name}"\n  Relative Permittivity = {eps}\nEnd\n')
 
@@ -242,9 +240,9 @@ def resolve_missing_electrodes(
     otherwise just silently drop them from the .sif's Boundary Condition
     list (via its `name in electrode_potentials_v` filter), leaving Elmer
     to solve with a missing boundary condition on that surface with no
-    error at all. GitHub issue #10 item 2: this must be a hard failure,
-    not a silent omission -- a missing electrode BC can produce a
-    plausible-looking but physically wrong field map.
+    error at all. This must be a hard failure, not a silent omission -- a
+    missing electrode BC can produce a plausible-looking but physically
+    wrong field map.
     """
     return set(electrode_potentials_v) - set(boundary_ids)
 
@@ -256,8 +254,8 @@ def main() -> None:
               "  preconditioner/max_iterations default to ILU2/20000 -- pass ILU1 (and\n"
               "  optionally a lower max_iterations, e.g. 2000) for a large/finely-tiled\n"
               "  mesh where ILU2 fails with \"CRS_IncompleteLU: Number of nonzeros larger\n"
-              "  than HUGE(Integer)\" (a 32-bit overflow in Elmer's ILU2, confirmed on a\n"
-              "  7x7-tiled triple_gem_field mesh, 2026-09-24, docs/debugging_notes.md) --\n"
+              "  than HUGE(Integer)\" (a 32-bit overflow in Elmer's ILU2, seen on a\n"
+              "  7x7-tiled triple_gem_field mesh -- see docs/debugging_notes.md) --\n"
               "  ILU1 is not guaranteed to converge at extreme diagnostic voltage\n"
               "  multipliers (see this file's _solver_block comment), but did converge\n"
               "  cleanly at the realistic 1.15x production voltage on that same mesh.")
@@ -280,7 +278,7 @@ def main() -> None:
             f"electrode_potentials_v but not in mesh.names' boundaries {sorted(boundary_ids)} -- "
             "refusing to silently solve with a missing boundary condition. Either the mesh/"
             "geometry generation dropped this boundary, or model_info.json is stale relative "
-            "to the mesh that was actually built -- see GitHub issue #10 item 2."
+            "to the mesh that was actually built."
         )
 
     dielectrics_path = os.path.join(MESH_DIR, mesh_name, "dielectrics.dat")
@@ -303,21 +301,21 @@ def main() -> None:
     # *this* instead of re-deriving its own guess from the Gmsh-side
     # physical_group_ids block -- those are the pre-renumbering Gmsh tags,
     # not guaranteed to match mesh.names' actual post-ElmerGrid IDs (they
-    # have simply happened to agree so far). See GitHub issue #10 item 1;
-    # this directly mirrors the pattern write_sif.py itself already follows
-    # for boundary Target IDs (mesh.names as the single authoritative
-    # source, not the Gmsh tags model_info.json's physical_group_ids holds).
+    # have simply happened to agree so far). This directly mirrors the
+    # pattern write_sif.py itself already follows for boundary Target IDs
+    # (mesh.names as the single authoritative source, not the Gmsh tags
+    # model_info.json's physical_group_ids holds).
     model_info["garfield_material_indices"] = {name: bid - 1 for name, bid in body_ids.items()}
     with open(model_info_path, "w") as f:
         json.dump(model_info, f, indent=2)
     print(f"Updated {model_info_path} with garfield_material_indices: "
           f"{model_info['garfield_material_indices']}")
 
-    # Human-readable full chain, one line per body (GitHub issue #10 item
-    # 3): "Gas -> Elmer Body 1 -> Garfield material 0" -- everything above
-    # already prints the pieces of this separately (Body IDs / dielectrics.dat
-    # slots / garfield_material_indices); this just makes the whole mapping
-    # readable at a glance for a human checking a new mesh's material setup.
+    # Human-readable full chain, one line per body: "Gas -> Elmer Body 1 ->
+    # Garfield material 0" -- everything above already prints the pieces of
+    # this separately (Body IDs / dielectrics.dat slots /
+    # garfield_material_indices); this just makes the whole mapping readable
+    # at a glance for a human checking a new mesh's material setup.
     print("Material mapping:")
     for name, body_id in sorted(body_ids.items(), key=lambda kv: kv[1]):
         print(f"  {name} -> Elmer Body {body_id} -> Garfield material {body_id - 1} "
