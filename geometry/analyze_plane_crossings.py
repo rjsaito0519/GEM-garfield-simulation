@@ -195,36 +195,58 @@ def require_trajectories_tree(f, root_path: str, required_branches: list[str]):
     return tree
 
 
-def resolve_run_info_tree(f):
-    """This file's own run-info TTree, preferring "RunInfoTrajectories" but
-    falling back to the legacy shared "RunInfo" name it replaced (GitHub
-    issue #11 item 1) when that's all a file has. Needed for a file produced
-    by a job whose binary predated the tree-name split -- real, hit
-    2026-09-25: the 9x9 finite-geometry batch's jobs (issue #12 item 3) were
-    already running when a mid-session rebuild picked up that rename, so the
-    batch's part files ended up a mix of both names depending on when each
-    job actually started. Returns None if the file has neither tree.
+def _run_info_trees(f) -> list:
+    """This file's own run-info TTree(s) -- normally just one
+    ("RunInfoTrajectories" for export_avalanche_trajectories output,
+    "RunInfoEndpoints" for gem_avalanche output, or the legacy shared
+    "RunInfo" name both replaced, GitHub issue #11 item 1), but a merged
+    batch file can legitimately have more than one of these side by side:
+    real, hit 2026-09-25, the 9x9 finite-geometry batch's jobs (issue #12
+    item 3) were already running when a mid-session rebuild picked up the
+    RunInfoTrajectories rename, so some parts wrote the old name and some
+    the new one, and hadd keeps same-named trees as-is -- it does NOT merge
+    trees with DIFFERENT names, so the merged file ends up with one
+    "RunInfo" tree (the pre-rebuild parts' rows) and one
+    "RunInfoTrajectories" tree (the rest) side by side, each covering only
+    part of the run. Returns every one of these three names that's actually
+    present in the file, not just the first found -- a caller that only
+    read one of them would silently miss rows/parts. Returns [] if the file
+    has none of them.
     """
-    for name in ("RunInfoTrajectories", "RunInfo"):
-        if name in f:
-            return f[name]
-    return None
+    return [f[name] for name in ("RunInfoTrajectories", "RunInfoEndpoints", "RunInfo") if name in f]
+
+
+def read_run_info_arrays(f) -> dict[str, np.ndarray] | None:
+    """The (key, value) rows from every run-info tree this file has (see
+    _run_info_trees), concatenated across all of them -- for a field that
+    legitimately differs per part and must be aggregated over every part
+    (e.g. summing n_events_at_avalanche_size_limit), not just whichever
+    tree happened to be checked first. Returns None if the file has no
+    run-info tree at all.
+    """
+    trees = _run_info_trees(f)
+    if not trees:
+        return None
+    arrs = [t.arrays(["key", "value"], library="np") for t in trees]
+    return {
+        "key": np.concatenate([a["key"] for a in arrs]),
+        "value": np.concatenate([a["value"] for a in arrs]),
+    }
 
 
 def read_run_info(f) -> dict[str, str]:
-    """The (key, value) pairs from this file's own run-info tree (see
-    resolve_run_info_tree), collapsed to a plain dict -- last row wins per
-    key, which is fine for a single-part file or for a field expected to be
+    """The (key, value) pairs from every run-info tree this file has (see
+    _run_info_trees), collapsed to a plain dict -- last row wins per key,
+    which is fine for a single-part file or for a field expected to be
     identical across every part of a merged file (e.g. model_info_json).
-    For a field that legitimately differs per part (e.g. summing
-    n_events_at_avalanche_size_limit across parts), read
-    resolve_run_info_tree(f)'s arrays directly instead of using this.
+    For a field that legitimately differs per part and must be summed/
+    aggregated over every part (e.g. n_events_at_avalanche_size_limit), use
+    read_run_info_arrays(f) instead so no part's rows get silently dropped.
     Returns {} if the file has no run-info tree at all.
     """
-    tree = resolve_run_info_tree(f)
-    if tree is None:
+    arr = read_run_info_arrays(f)
+    if arr is None:
         return {}
-    arr = tree.arrays(["key", "value"], library="np")
     return dict(zip(arr["key"], arr["value"]))
 
 
@@ -404,6 +426,14 @@ def main() -> None:
           f"/ {n_total} ({100 * len(cohort) / n_total:.1f}% of all avalanche electrons)\n")
 
     print("Funnel within the GEM1-extracted cohort (genuine crossings only):")
+    # max(1, ...) not len(cohort) directly: an empty cohort (e.g. a run with
+    # genuinely zero GEM1-bottom crossings, which is exactly the pathological
+    # case this analysis exists to characterize -- real precedent in
+    # docs/debugging_notes.md's original single-GEM100 transfer-field scan)
+    # would otherwise raise ZeroDivisionError here instead of printing "0
+    # (0.0% of cohort)" for every stage, killing the script before any of
+    # the funnel is shown.
+    cohort_denom = max(1, len(cohort))
     prev_count = len(cohort)
     prev_label = "GEM1-extracted cohort"
     surviving = cohort
@@ -414,7 +444,7 @@ def main() -> None:
         still_going = [key for key in surviving if _crossed(z[track_masks[key]], z_thresh)]
         step_pct = 100 * len(still_going) / prev_count if prev_count > 0 else float("nan")
         print(f"  {label:26s}: {len(still_going):4d} "
-              f"({100 * len(still_going) / len(cohort):5.1f}% of cohort, "
+              f"({100 * len(still_going) / cohort_denom:5.1f}% of cohort, "
               f"{step_pct:5.1f}% of {prev_label})")
         surviving_by_label[label] = still_going
         prev_count, prev_label, surviving = len(still_going), label, still_going
@@ -511,7 +541,7 @@ def main() -> None:
             fate = f"{_status_name(st)} in {region}"
             fate_counts[fate] = fate_counts.get(fate, 0) + 1
         for fate, c in sorted(fate_counts.items(), key=lambda kv: -kv[1]):
-            print(f"  {fate:55s}: {c:4d} ({100 * c / len(cohort):5.1f}%)")
+            print(f"  {fate:55s}: {c:4d} ({100 * c / cohort_denom:5.1f}%)")
 
 
 if __name__ == "__main__":

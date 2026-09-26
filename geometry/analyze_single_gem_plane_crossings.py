@@ -162,6 +162,12 @@ def main() -> None:
           f"({100 * len(cohort) / n_total:.1f}% of all avalanche electrons)\n")
 
     print("Funnel within the GEM-extracted cohort (genuine crossings only):")
+    # max(1, ...) not len(cohort) directly: an empty cohort (genuinely zero
+    # GEM-bottom crossings) is exactly the pathological case this script's
+    # own module docstring says happened for real in the original
+    # single-GEM100 transfer-field scan -- would otherwise raise
+    # ZeroDivisionError here instead of printing the funnel as all zeros.
+    cohort_denom = max(1, len(cohort))
     prev_count = len(cohort)
     prev_label = "GEM-extracted cohort"
     surviving = cohort
@@ -171,7 +177,7 @@ def main() -> None:
         still_going = [key for key in surviving if _crossed(z[track_masks[key]], z_thresh)]
         step_pct = 100 * len(still_going) / prev_count if prev_count > 0 else float("nan")
         print(f"  {label:16s}: {len(still_going):4d} "
-              f"({100 * len(still_going) / len(cohort):5.1f}% of cohort, "
+              f"({100 * len(still_going) / cohort_denom:5.1f}% of cohort, "
               f"{step_pct:5.1f}% of {prev_label})")
         prev_count, prev_label, surviving = len(still_going), label, still_going
 
@@ -188,7 +194,7 @@ def main() -> None:
             fate = f"{_status_name(st)} in {region}"
             fate_counts[fate] = fate_counts.get(fate, 0) + 1
         for fate, c in sorted(fate_counts.items(), key=lambda kv: -kv[1]):
-            print(f"  {fate:55s}: {c:4d} ({100 * c / len(cohort):5.1f}%)")
+            print(f"  {fate:55s}: {c:4d} ({100 * c / cohort_denom:5.1f}%)")
 
 
 if __name__ == "__main__":

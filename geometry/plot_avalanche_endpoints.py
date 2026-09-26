@@ -23,11 +23,23 @@ import matplotlib.pyplot as plt
 import numpy as np
 import uproot
 
+from analyze_plane_crossings import _load_config_from_run_info
 from triple_gem_field_model import TripleGemTestConfig, _layer_z_centers, _half_extent_cm
 
 IMG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results", "img")
 
 # GEM z-boundaries, for annotating the plots -- see triple_gem_field_model.py.
+# Placeholders; main() resolves these from the actual input file's own
+# RunInfoEndpoints (via _load_config_from_run_info) before anything below
+# reads them -- unlike analyze_plane_crossings.py/analyze_single_gem_plane_
+# crossings.py, this script used to always assume today's default
+# TripleGemTestConfig() matched whatever file it was pointed at, with no
+# check and no warning if it didn't (found in a 2026-09-27 code audit). Not
+# currently reachable with a wrong result -- every 3-GEM-stack file this
+# project can currently produce shares the same z-bands/hole radii as the
+# default -- but a future geometry catalog revision replotting an older
+# archived file would have silently used the wrong bands with nothing
+# printed to say so.
 _CONFIG = TripleGemTestConfig()
 _Z_CENTERS = _layer_z_centers(_CONFIG)
 
@@ -73,6 +85,19 @@ def main() -> None:
     root_path = sys.argv[1]
     out_dir = sys.argv[2] if len(sys.argv) > 2 else IMG_DIR
     os.makedirs(out_dir, exist_ok=True)
+
+    global _CONFIG, _Z_CENTERS
+    resolved_config = _load_config_from_run_info(root_path)
+    if resolved_config is not None:
+        _CONFIG = resolved_config
+        _Z_CENTERS = _layer_z_centers(_CONFIG)
+        print(f"Geometry config: read from {root_path}'s own RunInfo tree "
+              "(matches the actual simulation conditions).\n")
+    else:
+        print(f"WARNING: {root_path} has no usable run-info geometry -- falling back to "
+              "today's default TripleGemTestConfig(). This is NOT verified to match the "
+              "actual conditions this file was produced with; the Cu/dielectric bands and "
+              "hole-wall overlay below may not reflect this file's real geometry.\n")
 
     with uproot.open(root_path) as f:
         data = f["Endpoints"].arrays(
