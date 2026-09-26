@@ -54,53 +54,53 @@
 ――\textbf{Gmsh}(ジオメトリ・メッシュ生成)、\textbf{Elmer FEM}
 (静電場ソルブ)、\textbf{Garfield++/Magboltz}(microscopicな電子雪崩
 シミュレーション)、\textbf{ROOT}(I/Oおよび、間接的にGarfield++が
-ビルドされるべきABIを規定する)、そして解析・可視化に使う
+ビルドされるべきABIを規定します)、そして解析・可視化に使う
 \textbf{Python}環境――の、詳細でステップバイステップなインストール
-ガイドである。
+ガイドです。
 
 リポジトリルートの\texttt{README.md}は、既にセットアップ済みの環境に
 戻ってきたユーザーが最低限必要とする情報(バージョン表とパス設定の
-場所)だけを載せている。本書はそれに対して、このスタックを初めて
+場所)だけを載せています。本書はそれに対して、このスタックを初めて
 セットアップする、あるいは何かをアップグレードした後に一部を
-再構築するユーザー向けの、より詳しいリファレンスである。
+再構築するユーザー向けの、より詳しいリファレンスです。
 
 本書は共有HEPクラスタ(KEKCCなど)、つまり通常sudo/管理者権限が無い
-環境を想定して書いている。以下の各インストール手順は、システム
-ディレクトリではなく\texttt{\$HOME}配下に置く。
+環境を想定して書いています。以下の各インストール手順は、システム
+ディレクトリではなく\texttt{\$HOME}配下に置きます。
 
 \subsection{インストール順序が重要な理由}
 
-このスタックの面倒ごとの大半を引き起こしている制約はただ一つ:
+このスタックの面倒ごとの大半を引き起こしている制約はただ一つです:
 \textbf{Garfield++は、パイプラインの他の部分が使うのとまったく同じ
 ROOTインストール(同じバージョン、同じコンパイラABI)に対してビルド
-されていなければならない。} ROOTの辞書生成ABIはバージョン間で変わる
+されている必要があります。} ROOTの辞書生成ABIはバージョン間で変わる
 ため、ROOT 6.32向けにリンクされたGarfield++ビルドは、ROOT 6.40の
-実行ファイルに対して以下のようなエラーでリンクに失敗する:
+実行ファイルに対して以下のようなエラーでリンクに失敗します:
 
 \begin{lstlisting}
 undefined reference to `ROOT::TGenericClassInfo::TGenericClassInfo(...)'
 undefined reference to `TGeoBBox::ComputeNormal(...)'
 \end{lstlisting}
 
-これを回避する方法は、一貫した1つのROOTバージョンを維持し、
-そのバージョンが変わるたびにGarfield++を再ビルドする以外にない。
-そのため、推奨されるインストール順序は以下の通り:
+これを回避するには、一貫した1つのROOTバージョンを維持し、
+そのバージョンが変わるたびにGarfield++を再ビルドする以外にありません。
+そのため、推奨されるインストール順序は以下の通りです:
 
 \begin{enumerate}
-  \item まずROOTをインストールし、使い続けるバージョンを決める。
-  \item Gmsh・Elmerをインストールする(ROOT/Garfield++とは独立)。
-  \item そのROOTインストールに対してGarfield++をビルドする。
-  \item Python環境をセットアップする(独立しているが、
-    \ref{sec:python}節に実際のパッケージ競合の落とし穴がある)。
+  \item まずROOTをインストールし、使い続けるバージョンを決めます。
+  \item Gmsh・Elmerをインストールします(ROOT/Garfield++とは独立です)。
+  \item そのROOTインストールに対してGarfield++をビルドします。
+  \item Python環境をセットアップします(独立していますが、
+    \ref{sec:python}節に実際のパッケージ競合の落とし穴があります)。
   \item 同じROOT + Garfield++の組み合わせに対して、本リポジトリ
-    自身のC++マクロをビルドする。
+    自身のC++マクロをビルドします。
 \end{enumerate}
 
 \subsection{動作確認済みのバージョンの組み合わせ}
 
 以下は、本プロジェクトが実際にビルド・動作確認(2026-09-26時点)している
-組み合わせである。いずれか1つのコンポーネントの後続のポイントリリースが
-他のコンポーネントと互換であることは保証されない(再検証が必要)。
+組み合わせです。いずれか1つのコンポーネントの後続のポイントリリースが
+他のコンポーネントと互換であることは保証されません(再検証が必要です)。
 
 \begin{table}[h]
 \centering
@@ -121,39 +121,40 @@ gcc & 11.5.0 (Red Hat 11.5.0-14) \\
 
 \subsection{システムレベルのコンパイラ要件}
 
-以下のビルドを始める前に、システムに以下が揃っていることを確認する:
+以下のビルドを始める前に、システムに以下が揃っていることを確認して
+ください:
 \begin{itemize}
   \item C++17対応のC++コンパイラ(ここでは\texttt{gcc}/\texttt{g++}
-    11.5.0。比較的新しいgcc/clangであれば何でもよい)、
+    11.5.0。比較的新しいgcc/clangであれば何でも構いません)、
   \item Fortranコンパイラ(\texttt{gfortran})、
   \item CMake 3.16以上。
 \end{itemize}
-Fortranコンパイラは見落としやすい: Garfield++自身の
-\texttt{CMakeLists.txt}は無条件に\texttt{project(... LANGUAGES
-Fortran CXX)}を宣言しており、これはMagboltz(Garfield++が呼び出す
-ガス輸送計算コード)がFortranで書かれているためである――Fortran
-コンパイラが無いと、Garfield++のビルドは\texttt{cmake}の段階で
-即座に失敗し、エラーメッセージにFortranコンパイラのチェック名が
-現れる。
+Fortranコンパイラは見落としやすいので注意してください。Garfield++
+自身の\texttt{CMakeLists.txt}は無条件に\texttt{project(...
+LANGUAGES Fortran CXX)}を宣言しており、これはMagboltz(Garfield++
+が呼び出すガス輸送計算コード)がFortranで書かれているためです。
+Fortranコンパイラが無いと、Garfield++のビルドは\texttt{cmake}の
+段階で即座に失敗し、エラーメッセージにFortranコンパイラのチェック名
+が現れます。
 
-\textbf{GSL(GNU Scientific Library)はここでは不要である}――一部の
+\textbf{GSL(GNU Scientific Library)はここでは不要です}。一部の
 古いGarfield++のドキュメント/メモがこれを前提条件として挙げている
-ことがあるが、これはGarfield++自身の\texttt{CMakeLists.txt}
+ことがありますが、これはGarfield++自身の\texttt{CMakeLists.txt}
 (\texttt{option(GARFIELD\_WITH\_GSL "Build Garfield++ with GSL
 (useless if C++>=17)" OFF)}――C++17より古い標準でビルドする場合のみ
-有効化・必須になる)を実際に確認して確定させた。本プロジェクトの
-Garfield++ビルドは一貫してC++17を使用しているため、GSLはインストール
-もリンクもされない。
+有効化・必須になります)を実際に確認して確定させました。本プロジェクト
+のGarfield++ビルドは一貫してC++17を使用しているため、GSLはインストール
+もリンクもされません。
 
 \section{ROOT}
 
-多くのHEP系クラスタ(KEKCCなど)には、既にROOTがインストールされている。
-それを使えばよい――本プロジェクト固有の要件は、Garfield++(セクション5)
-を同じそのROOTに対してビルドすることだけである。バージョンは
-\texttt{root-config --version}で確認する。
+多くのHEP系クラスタ(KEKCCなど)には、既にROOTがインストールされて
+います。それを使ってください――本プロジェクト固有の要件は、
+Garfield++(セクション5)を同じそのROOTに対してビルドすることだけ
+です。バージョンは\texttt{root-config --version}で確認できます。
 
-ROOTが無い場合は自分でビルドする。sudo/管理者権限は不要(すべて
-\texttt{\$HOME}配下に収まる):
+ROOTが無い場合は自分でビルドします。sudo/管理者権限は不要です
+(すべて\texttt{\$HOME}配下に収まります):
 
 \begin{lstlisting}
 git clone --branch v6-40-04 --depth 1 https://github.com/root-project/root.git root_src
@@ -163,25 +164,25 @@ cmake --build . -j"$(nproc)"
 cmake --install .
 \end{lstlisting}
 
-詳しいビルド手順・オプション:
+詳しいビルド手順・オプションは以下を参照してください:
 \url{https://root.cern/install/build_from_source/}。
 
 本プロジェクトは\texttt{thisroot.sh}が(\texttt{.bashrc}などから)
-グローバルにsourceされていることには依存しない――各スクリプト・
-ビルド手順が必要なパスをその都度明示的に設定する(\ref{sec:paths}節
+グローバルにsourceされていることには依存していません――各スクリプト・
+ビルド手順が必要なパスをその都度明示的に設定します(\ref{sec:paths}節
 参照)。以降のすべてのツールがどのROOTインストールを指しているか、
-一貫させることだけ気をつければよい。
+一貫させることだけ気をつけてください。
 
 \section{Gmsh}
 
-必要なのは独立した2つのもの: Gmsh CLI(このプロジェクトはGmshを
-ほぼ全面的にPython API経由で操作するため、付随的にしか使わない)と、
-Gmsh Pythonモジュールである。
+必要なのは独立した2つのものです: Gmsh CLI(このプロジェクトはGmshを
+ほぼ全面的にPython API経由で操作するため、付随的にしか使いません)と、
+Gmsh Pythonモジュールです。
 
 \subsection{Gmsh CLI(任意)}
 
 \url{https://gmsh.info/#Download}からビルド済みバイナリを
-ダウンロードして展開する。例:
+ダウンロードして展開します。例:
 
 \begin{lstlisting}
 mkdir -p ~/local
@@ -199,31 +200,31 @@ python3 -c "import gmsh; print(gmsh.__file__)"
 \end{lstlisting}
 
 pipパッケージ自体が同梱するバージョン(ここでは4.15.2)は、上記の
-スタンドアロンCLIのバージョンと厳密に一致している必要はない――両者は
-独立したインストールであり、本プロジェクトは実行時にPython APIしか
-実際には呼び出さない。
+スタンドアロンCLIのバージョンと厳密に一致している必要はありません
+――両者は独立したインストールであり、本プロジェクトは実行時に
+Python APIしか実際には呼び出しません。
 
 \textbf{importの順序に関する落とし穴:} 一部のconda/pip環境では、
 同一のPythonプロセス内で\texttt{matplotlib}より先に\texttt{gmsh}を
-importすると以下のエラーになる:
+importすると以下のエラーになります:
 \begin{lstlisting}
 ImportError: /usr/lib64/libstdc++.so.6: version `CXXABI_1.3.15' not found
 \end{lstlisting}
 Gmshのネイティブ拡張がシステムの古い\texttt{libstdc++.so.6}を先に
 読み込んでしまうことがあり、そのSONAMEがプロセス全体で一度読み込まれると、
-matplotlibのコンパイル済み拡張(より新しいlibstdc++ ABIを要求する)は
-本来必要なバージョンを読み込めなくなる。修正は純粋にPythonの
-import順序レベルの話である: \textbf{両方を使うスクリプトでは、必ず
+matplotlibのコンパイル済み拡張(より新しいlibstdc++ ABIを要求します)は
+本来必要なバージョンを読み込めなくなります。修正は純粋にPythonの
+import順序レベルの話です: \textbf{両方を使うスクリプトでは、必ず
 \texttt{import gmsh}より先に\texttt{import matplotlib}(あるいは
-matplotlibをimportする何らかのモジュール)を行うこと。}
-本プロジェクト自身のスクリプトは既にこの規約に従っている。両方に
-触れる新しいスクリプトを追加する場合もこれを維持すること。
+matplotlibをimportする何らかのモジュール)を行ってください。}
+本プロジェクト自身のスクリプトは既にこの規約に従っています。両方に
+触れる新しいスクリプトを追加する場合もこれを維持してください。
 
 \section{Elmer FEM}
 
-ソースからビルドする(\url{http://www.elmerfem.org/blog/binaries/}に
-一部プラットフォーム向けのビルド済みバイナリもあるが、ソースからの
-ビルドの方がクラスタ間の移植性が高い):
+ソースからビルドします(\url{http://www.elmerfem.org/blog/binaries/}に
+一部プラットフォーム向けのビルド済みバイナリもありますが、ソースからの
+ビルドの方がクラスタ間の移植性が高くなります):
 
 \begin{lstlisting}
 git clone https://github.com/ElmerCSC/elmerfem.git elmer_src
@@ -235,19 +236,20 @@ cmake --build . -j"$(nproc)"
 cmake --install .
 \end{lstlisting}
 
-\texttt{-DWITH\_MPI=OFF}は意図的な単純化である: 本プロジェクトの
-メッシュは1回の実行につき1つの線形システムとして解かれる(領域分割
-されない)ため、\texttt{ElmerSolver}内でのMPI並列化は不要であり、
-MPI無しビルドにすることで、クラスタ上の共有/中央集権的なElmer
-インストールにありがちな共有ライブラリのバージョン不一致問題
-(例: システムの\texttt{libmpi\_usempif08.so}の不一致)の
-クラス全体を回避できる。自分の環境に既に動作するMPI有効なElmer
-インストールがあるなら、それを使ってもよい――ただし\texttt{ElmerSolver}
-が実際に動くことを確認すること(共有HPCインストールの中には、
-CMake/リンクの段階は通過するのに、実際に呼び出した瞬間に共有
-ライブラリエラーで初めて壊れていることが判明するものもある)。
+\texttt{-DWITH\_MPI=OFF}は意図的な単純化です。本プロジェクトの
+メッシュは1回の実行につき1つの線形システムとして解かれるため
+(領域分割されません)、\texttt{ElmerSolver}内でのMPI並列化は不要
+であり、MPI無しビルドにすることで、クラスタ上の共有/中央集権的な
+Elmerインストールにありがちな共有ライブラリのバージョン不一致問題
+(例: システムの\texttt{libmpi\_usempif08.so}の不一致)のクラス
+全体を回避できます。自分の環境に既に動作するMPI有効なElmer
+インストールがあるなら、それを使っても構いません――ただし
+\texttt{ElmerSolver}が実際に動くことを確認してください(共有HPC
+インストールの中には、CMake/リンクの段階は通過するのに、実際に
+呼び出した瞬間に共有ライブラリエラーで初めて壊れていることが判明する
+ものもあります)。
 
-以下で動作確認する:
+以下で動作確認します:
 \begin{lstlisting}
 export ELMER_HOME=$HOME/elmer
 export PATH="$ELMER_HOME/bin:$PATH"
@@ -258,7 +260,7 @@ ElmerSolver -version
 \section{Garfield++}
 
 公式ソース(\url{https://gitlab.cern.ch/garfield/garfieldpp})から、
-セクション2のROOTインストールを明示的に指定してビルドする:
+セクション2のROOTインストールを明示的に指定してビルドします:
 
 \begin{lstlisting}
 git clone https://gitlab.cern.ch/garfield/garfieldpp.git garfieldpp_src
@@ -278,43 +280,43 @@ cmake --install .
 \subsection{ROOTアップグレード後の再ビルド}
 
 ROOTをアップグレードした場合、Garfield++は\textbf{必ず}新しい
-インストールに対して再ビルドしなければならない(上記と同じ
+インストールに対して再ビルドしてください(上記と同じ
 cmake/build/installの手順を、\texttt{ROOTSYS}を新しいROOTに向けて
-再実行する)――古い\texttt{libGarfield.so}を新しいROOTに対して
+再実行します)。古い\texttt{libGarfield.so}を新しいROOTに対して
 そのまま使い回すのは、まさにセクション1.1で述べたABI不一致その
-ものである。Garfield++のインストールが他プロジェクトと共有されて
-いる場合は、その場で再ビルドする前に、依存している他の人に確認
-すること。
+ものです。Garfield++のインストールが他プロジェクトと共有されて
+いる場合は、その場で再ビルドする前に、依存している他の人に確認して
+ください。
 
 \subsection{事前に知っておくべきCMakeの落とし穴}
 
 少なくとも1つの環境では、Garfield++を利用するプロジェクト(本
-リポジトリ自身の\texttt{macros/CMakeLists.txt}を含む)の新規の
+リポジトリ自身の\texttt{macros/CMakeLists.txt}を含みます)の新規の
 \texttt{cmake ..}が、\texttt{CMAKE\_PREFIX\_PATH}を正しく設定
 していても、\texttt{ROOT\_DIR}を古い/誤ったROOTインストールに
-静かに解決してしまうことがある。これは、Garfield自身の
+静かに解決してしまうことがあります。これは、Garfield自身の
 \texttt{GarfieldConfig.cmake}が内部で
 \texttt{find\_dependency(ROOT 6.0 COMPONENTS Geom Gdml)}を
 呼んでおり、環境から継承された\texttt{CMAKE\_PREFIX\_PATH}次第で
-この解決の競合に勝ってしまうことがあるためである。もし
+この解決の競合に勝ってしまうことがあるためです。もし
 \texttt{cmake ..}の出力の\texttt{Found Vdt: ...}のような行が
-誤ったROOTを報告していたら、明示的に強制する:
+誤ったROOTを報告していたら、明示的に強制してください:
 \begin{lstlisting}
 cmake -DROOT_DIR=$HOME/local/root/6.40.04/cmake ..
 \end{lstlisting}
 あるいは、利用側プロジェクト自身の\texttt{CMakeLists.txt}の
 \texttt{CMAKE\_PREFIX\_PATH}設定の直後に
-\texttt{set(ROOT\_DIR "..." CACHE PATH "" FORCE)}を追加する
+\texttt{set(ROOT\_DIR "..." CACHE PATH "" FORCE)}を追加してください
 (本リポジトリの\texttt{macros/CMakeLists.txt}は既にこれを行って
-いる――そのファイル自身のコメント参照)。
+います――そのファイル自身のコメントも参照してください)。
 
 \section{Python環境}
 \label{sec:python}
 
-conda・venv・素の\texttt{pip install --user}のいずれでもよく、
-本プロジェクトは特定の環境マネージャに依存しない。どちらもsudoは
-不要(conda/venv環境はデフォルトで\texttt{\$HOME}配下に入り、
-\texttt{--user}も同様)。以下をインストールする:
+conda・venv・素の\texttt{pip install --user}のいずれでも構いません。
+本プロジェクトは特定の環境マネージャに依存しません。どちらもsudoは
+不要です(conda/venv環境はデフォルトで\texttt{\$HOME}配下に入り、
+\texttt{--user}も同様です)。以下をインストールします:
 
 \begin{lstlisting}
 pip install --user gmsh numpy matplotlib uproot pyvista plotly
@@ -324,18 +326,19 @@ pip install --user "vtk==9.3.1"
 \subsection{\texttt{vtk}のバージョン固定(必須)}
 
 \texttt{pyvista}を単体でインストールすると、その時点の最新の
-\texttt{vtk}wheelが引き込まれる。2026-09時点でそれは\texttt{9.7.x}
-だが、これは\texttt{pyvista}のHTML出力パスが使う\texttt{trame\_vtk}
-と\textbf{非互換}であり、シーンをHTML出力向けに直列化する際に以下で
-失敗する(\texttt{visualization/plot\_triple\_gem.py}で使用):
+\texttt{vtk}wheelが引き込まれます。2026-09時点でそれは
+\texttt{9.7.x}ですが、これは\texttt{pyvista}のHTML出力パスが使う
+\texttt{trame\_vtk}と\textbf{非互換}であり、シーンをHTML出力向けに
+直列化する際に以下で失敗します
+(\texttt{visualization/plot\_triple\_gem.py}で使用):
 \begin{lstlisting}
 TypeError: unhashable type 'VTKAOSArray_vtkFloatArray'
 \end{lstlisting}
 (\texttt{pyvista}をインストールした\emph{後}に)明示的に
-\texttt{vtk==9.3.1}へピン留めすることで解決する。将来
+\texttt{vtk==9.3.1}へピン留めすることで解決します。将来
 \texttt{trame\_vtk}のリリースがこの非互換性を修正した場合は
-このピン留めを緩めてよいかもしれないが、それは前提とせず、
-検証した上での意図的な判断として扱うこと。
+このピン留めを緩めてもよいかもしれませんが、それは前提とせず、
+検証した上での意図的な判断として扱ってください。
 
 \subsection{本プロジェクトが実際に動作確認しているバージョン}
 
@@ -356,14 +359,16 @@ gmsh (Python) & 4.15.2 \\
 \end{tabular}
 \end{table}
 
-補足: 本プロジェクトのPythonコードがROOTファイルを読むのに使うのは
-PyROOTではなく\texttt{uproot}である。PyROOTは意図的に使用していない
+補足: 本プロジェクトのPythonコードがROOTファイルを読むのに使っている
+のはPyROOTではなく\texttt{uproot}です。PyROOTは意図的に使用していない
 ため、Python環境自体のバージョンをROOT側のPythonバインディングと
-一致させる必要は一切ない――追跡すべきバージョン制約が1つ減っている。
+一致させる必要は一切ありません――追跡すべきバージョン制約が1つ
+減っています。
 
 \section{本プロジェクトのC++マクロのビルド}
 
-ROOT・Garfield++・Elmerがインストールされ、互いに整合していれば:
+ROOT・Garfield++・Elmerがインストールされ、互いに整合していれば
+以下でビルドできます:
 
 \begin{lstlisting}
 cd GEM-garfield-simulation/macros
@@ -374,37 +379,37 @@ cmake --build . -j"$(nproc)"
 
 \texttt{macros/CMakeLists.txt}は、デフォルトで
 \texttt{CMAKE\_PREFIX\_PATH}を\texttt{\$HOME/local/garfield}と
-\texttt{\$HOME/local/root/6.40.04}に向けている――自分の環境の
+\texttt{\$HOME/local/root/6.40.04}に向けています。自分の環境の
 インストール場所が本プロジェクトの開発機と異なる場合は、同ファイル
-冒頭のこの2つのパスを編集すること。
+冒頭のこの2つのパスを編集してください。
 
 \texttt{cmake ..}が誤ったROOTを報告する場合は(\ref{sec:python}節
-より前のセクション3.3参照)、そこに示した通り\texttt{-DROOT\_DIR=...}
-を明示的に渡す。
+より前のセクション5.2参照)、そこに示した通り\texttt{-DROOT\_DIR=...}
+を明示的に渡してください。
 
 \section{パス設定がどこにあるか(シェル起動ファイルに依存しない)}
 \label{sec:paths}
 
 本プロジェクトは、\texttt{ROOTSYS}・\texttt{ELMER\_HOME}・
 \texttt{GARFIELD\_HOME}が\texttt{.bashrc}(など)からグローバルに
-exportされていることに\textbf{意図的に依存しない}。各エントリポイント
-が必要なものをその都度明示的に設定する:
+exportされていることに\textbf{意図的に依存していません}。各エント
+リポイントが必要なものをその都度明示的に設定します:
 
 \begin{itemize}
   \item \texttt{elmer/run\_field\_solve.sh}は、
     \texttt{ElmerGrid}/\texttt{ElmerSolver}を呼び出す前に自分自身で
     \texttt{ELMER\_HOME}/\texttt{PATH}/\texttt{LD\_LIBRARY\_PATH}を
-    exportする。
+    exportします。
   \item \texttt{macros/CMakeLists.txt}は、configure時に自分自身で
     \texttt{CMAKE\_PREFIX\_PATH}(必要なら\texttt{ROOT\_DIR}も)を
-    設定する。
+    設定します。
   \item Pythonスクリプトは\texttt{uproot}(純粋なPython)経由で
-    ROOTファイルを読むため、ROOT環境を一切必要としない。
+    ROOTファイルを読むため、ROOT環境を一切必要としません。
 \end{itemize}
 
 上記のデフォルトのパスと異なる自分自身のパスをセットアップした場合、
-編集が必要なのは上の2ファイルだけである――他のどこかに隠れた
-第三の重複箇所は存在しない。
+編集が必要なのは上の2ファイルだけです――他のどこかに隠れた第三の
+重複箇所はありません。
 
 \subsection{任意: ネットワークファイルシステム上でのシェル起動高速化}
 
@@ -412,21 +417,21 @@ exportされていることに\textbf{意図的に依存しない}。各エン�
 あり、大きなconda環境やROOTインストールのせいで、セッションの
 \emph{最初の}\texttt{python}/\texttt{root}呼び出しが遅い(多数の
 小さいファイルへのネットワーク越しstat/openの積み重ねで数十秒
-かかる)場合、その環境を1つのsquashfsイメージにまとめて、
+かかります)場合、その環境を1つのsquashfsイメージにまとめて、
 ノードローカルの\texttt{/tmp}配下に読み取り専用でマウントするのが
-有効な対策の一つである。本プロジェクトの開発機自体がまさにこの
-方式を使っている(そのマシン固有の実装詳細は、本リポジトリの外に
-ある\texttt{\textasciitilde/local/envfs\_README.md}参照)――これは
-純粋な性能最適化であり、完全に任意であり、本書の他の内容とは独立
-している: バッチ(LSF)ジョブは、実体としての(マウントされていない)
-パスを常に見るため、これの影響を一切受けない。
+有効な対策の一つです。本プロジェクトの開発機自体がまさにこの方式を
+使っています(そのマシン固有の実装詳細は、本リポジトリの外にある
+\texttt{\textasciitilde/local/envfs\_README.md}を参照してください)
+――これは純粋な性能最適化であり、完全に任意であり、本書の他の内容
+とは独立しています: バッチ(LSF)ジョブは、実体としての(マウント
+されていない)パスを常に見るため、これの影響を一切受けません。
 
 \section{パイプライン全体のエンドツーエンド動作確認}
 
 上記すべてをインストールした後、\texttt{triple\_gem\_field}モデルを
 使って、ジオメトリ生成からPython解析まで、パイプライン全体が実際に
-動くことを確認する(このコマンド列は\texttt{docs/reference.md}
-\S2で動作確認済みのものそのもの):
+動くことを確認します(このコマンド列は\texttt{docs/reference.md}
+\S2で動作確認済みのものそのものです):
 
 \begin{lstlisting}
 cd GEM-garfield-simulation
@@ -447,39 +452,40 @@ python3 geometry/analyze_plane_crossings.py \
 
 正常に完了すると、\texttt{results/root/triple\_gem\_field\_avalanche.root}
 と\texttt{results/html/triple\_gem\_field\_overview.html}が生成され、
-最後のコマンドがPythonのtracebackなしにfunnel/summaryを出力する。
+最後のコマンドがPythonのtracebackなしにfunnel/summaryを出力します。
 各パイプライン段のCLI引数の意味(別のmesh/modelに対してそれらを
-どう計算するかを含む)や、7×7 production configurationのフル実行
-方法は\texttt{docs/reference.md}を参照。
+どう計算するかを含みます)や、7×7 production configurationのフル
+実行方法は\texttt{docs/reference.md}を参照してください。
 
 \section{既知の互換性の落とし穴まとめ}
 
 \begin{itemize}
   \item \textbf{Fortranコンパイラの不足}: \texttt{gfortran}が無いと
-    Garfield++のビルドは\texttt{cmake}の段階で即座に失敗する
-    (Magboltzの実体がFortranのため)。GSLは、古いドキュメントの
-    記載に反して、C++17ビルドでは不要(セクション1.3)。
+    Garfield++のビルドは\texttt{cmake}の段階で即座に失敗します
+    (Magboltzの実体がFortranのためです)。GSLは、古いドキュメントの
+    記載に反して、C++17ビルドでは不要です(セクション1.3)。
   \item \textbf{Garfield++ / ROOTのABI}: 使うROOTと厳密に同じ
-    バージョンに対してビルドされていなければならない。ROOTを
-    アップグレードしたら必ずGarfield++を再ビルドする(セクション5.1)。
+    バージョンに対してビルドされている必要があります。ROOTを
+    アップグレードしたら必ずGarfield++を再ビルドしてください
+    (セクション5.1)。
   \item \textbf{CMakeが誤った\texttt{ROOT\_DIR}を解決する}: 新規の
-    \texttt{cmake ..}が誤ったものを選んだら明示的に強制する
+    \texttt{cmake ..}が誤ったものを選んだら明示的に強制してください
     (セクション5.2)。
   \item \textbf{\texttt{gmsh}と\texttt{matplotlib}のimport順序}:
     両方に触れる同一プロセスでは、必ずmatplotlibに触れるモジュールを
-    \texttt{gmsh}より先にimportする(セクション3、Gmsh)。
-  \item \textbf{\texttt{vtk}のバージョン}: \texttt{9.3.1}に固定する
-    こと――最新wheelは\texttt{pyvista}のHTML出力を壊す
+    \texttt{gmsh}より先にimportしてください(セクション3、Gmsh)。
+  \item \textbf{\texttt{vtk}のバージョン}: \texttt{9.3.1}に固定して
+    ください――最新wheelは\texttt{pyvista}のHTML出力を壊します
     (セクション6.1)。
   \item \textbf{共有/HPCインストール上のMPI有効Elmer}: ビルドが
-    通ることだけでなく、\texttt{ElmerSolver}が実際に実行時に
-    動くことを確認する――壊れた共有MPIランタイムはCMake/リンクの
-    段階を通過してしまい、実際に呼び出して初めて共有ライブラリ
-    エラーで失敗することがある(セクション4)。
+    通ることだけでなく、\texttt{ElmerSolver}が実際に実行時に動く
+    ことを確認してください――壊れた共有MPIランタイムはCMake/リンク
+    の段階を通過してしまい、実際に呼び出して初めて共有ライブラリ
+    エラーで失敗することがあります(セクション4)。
 \end{itemize}
 
 パイプライン自体を組み立てて動かす過程で踏んだ落とし穴(基盤ツール
-のインストールそのものではなく)については、本リポジトリの
-\texttt{docs/pipeline\_gotchas.md}を参照。
+のインストールそのものではありません)については、本リポジトリの
+\texttt{docs/pipeline\_gotchas.md}を参照してください。
 
 \end{document}
