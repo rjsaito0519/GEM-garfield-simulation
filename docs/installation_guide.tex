@@ -9,6 +9,16 @@
 \usepackage{parskip}
 \usepackage{enumitem}
 \usepackage{titlesec}
+\usepackage{microtype}
+\usepackage[htt]{hyphenat}
+
+% Long inline \texttt{} paths/identifiers (file paths, CMake flags) have no
+% natural break points and were overflowing past the right margin. microtype
+% + hyphenat[htt] lets LaTeX hyphenate/break inside \texttt text, and
+% emergencystretch is a last-resort fallback so a genuinely unbreakable token
+% loosens inter-word spacing instead of overflowing the page.
+\emergencystretch=3em
+\sloppy
 
 \hypersetup{
   colorlinks=true,
@@ -93,7 +103,7 @@ are not guaranteed to be compatible with the others without re-testing.
 
 \begin{table}[h]
 \centering
-\begin{tabular}{@{}ll@{}}
+\begin{tabular}{@{}p{6.5cm}p{5cm}@{}}
 \toprule
 Tool & Version \\
 \midrule
