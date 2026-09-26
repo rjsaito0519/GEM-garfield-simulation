@@ -150,15 +150,28 @@ class BJobStatusCache:
         self._status: dict[int, str] = {}
 
     def refresh(self) -> None:
+        """Re-poll `bjobs -a`. Leaves the previous snapshot untouched (does
+        NOT clear self._status) if the call itself fails (nonzero exit,
+        e.g. a transient mbatchd hiccup on a busy shared cluster) -- a
+        cleared cache would otherwise make get_status() fall through to
+        "not in bjobs -a's snapshot" for every job still genuinely PENDING/
+        RUNNING (not just ones that finished and aged out), which wait_all
+        treats as "UNKNOWN, stop polling", falsely reporting a fully
+        healthy in-progress batch as finished/failed on a single flaky
+        poll cycle.
+        """
         proc = subprocess.run(
             shlex.split("bjobs -a"), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
-        self._status = {}
+        if proc.returncode != 0:
+            return
+        status: dict[int, str] = {}
         for line in proc.stdout.splitlines():
             columns = line.split()
             if len(columns) < 4 or not columns[0].isdigit():
                 continue  # header line or malformed
-            self._status[int(columns[0])] = columns[2]
+            status[int(columns[0])] = columns[2]
+        self._status = status
 
     def get_status(self, job_id: int, log_path: str | None = None) -> str:
         """Status string (PEND/RUN/DONE/EXIT/...). If bjobs -a no longer

@@ -456,6 +456,22 @@ def main() -> None:
     # when folding a dict-assigned RNTuple into this file. A classic TTree
     # is also consistent with every other tree in this project (see
     # CLAUDE.md's "prefer ROOT (TTree)" convention) and merges cleanly.
+    # The real per-part seed, read back from each part's own RunInfo, NOT
+    # job["seed"] -- that's this invocation's *expected* seed (base_seed +
+    # index), and with --resume-run-id/--retry-indices, an invocation that
+    # doesn't repeat the exact same --base-seed gets a different (still
+    # valid) base_seed each time it runs, including for parts that were
+    # never resubmitted. Writing job["seed"] here silently recorded the
+    # WRONG seed for every untouched part whenever a later merge-only pass
+    # recomputed a fresh base_seed -- real, confirmed 2026-09-26 in
+    # triple_gem_field_v1.15x_n7_avalanche.root's BatchMergeProvenance
+    # (every part showed one contiguous fake seed range that matched
+    # neither the original nor the retried jobs' real embedded rng_seed).
+    # _validate_part already deliberately doesn't check rng_seed for this
+    # same reason (see its docstring) -- provenance must still report the
+    # true value, just not gate the merge on it matching a formula.
+    actual_seeds = [int(_read_run_info(j["part_root_path"])["rng_seed"]) for j in jobs]
+
     provenance_path = os.path.join(batch_tmp_dir, "provenance.root")
     with uproot.recreate(provenance_path) as f:
         f.mktree("BatchMergeProvenance", {
@@ -466,7 +482,7 @@ def main() -> None:
         })
         f["BatchMergeProvenance"].extend({
             "part_index": np.array([j["index"] for j in jobs]),
-            "seed": np.array([j["seed"] for j in jobs]),
+            "seed": np.array(actual_seeds),
             "event_offset": np.array([j["offset"] for j in jobs]),
             "n_events": np.array([j["n_events"] for j in jobs]),
         })
