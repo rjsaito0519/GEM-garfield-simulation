@@ -142,7 +142,6 @@ docs/           詳細ドキュメント（下記「ドキュメント」参照�
   `results/`出力構成、ROOT出力スキーマ、efficiency定義
 - `docs/debugging_notes.md` — 開発中の調査ログ・仮説検証の記録（日付順）
 - `docs/pipeline_gotchas.md` — Gmsh/Elmer/Garfield++/ROOT/Python連携で踏んだ落とし穴集
-- `CLAUDE.md` — AIエージェント向けエントリポイント
 - 関連する主な GitHub Issues: [#15](https://github.com/rjsaito0519/GEM-garfield-simulation/issues/15) (periodic boundary・voltage scan・文献比較、今後の作業)
 
 ## 実行環境

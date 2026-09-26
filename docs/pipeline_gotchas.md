@@ -109,20 +109,13 @@
 
 15. **`matplotlib`は`gmsh`より先にimportする。** `gmsh`のネイティブ拡張が
     システムの古い`libstdc++`を先に読み込んでしまうと、より新しいABIを
-    要求する`matplotlib`の拡張が読み込めなくなる（`env_gmsh_matplotlib_
-    libstdcxx`参照）。
+    要求する`matplotlib`の拡張が読み込めなくなる。
 
 16. **PyVista導入時、`pip install pyvista`が同時に入れる最新の`vtk`
     （2026-09時点で9.7.0）は`trame_vtk`（2.8.13）のシーン直列化コードと
     非互換で、`TypeError: unhashable type 'VTKAOSArray_vtkFloatArray'`で
     HTML出力に失敗する。** `pip install "vtk==9.3.1"`で明示的に
     ダウングレードすると解決する。
-
-17. **envfsキャッシュ（`~/local/bin/envfs.sh`）は、pip installの途中で
-    repackすると不整合なイメージができる。** 環境変更（pip install/
-    uninstallの一連の作業）が完全に終わってから`envfs.sh repack work`を
-    実行すること。詳細・パッケージ追加履歴は`~/local/envfs_README.md`
-    （このリポジトリの外、ホームディレクトリ直下）を参照。
 
 ## 出力ディレクトリ
 
@@ -145,20 +138,17 @@
     前提にしたパス計算なので、`results/`の構成自体を変える場合はこの関数の
     ロジックも一緒に直すこと。
 
-20. **`results/mesh`・`results/root`はディスク容量が大きくなる（mesh/root
-    ファイル合計で数GB～）ため、home配下ではなくgroupストレージに実体を置き、
-    symlinkで`results/`配下から参照している。** 2026-09-24時点:
-    `/group/had/sks/Users/sryuta/GEM_garfield/{mesh,root}`が実体、
-    `results/mesh`・`results/root`はそこへのsymlink。`.gitignore`の
-    `results/*`パターンはsymlink自体もパス名一致で無視するため、
-    symlinkに変えても`git status`には出てこない。パス解決は透過的
+20. **`results/mesh`・`results/root`はディスク容量が大きくなりやすい
+    （mesh/rootファイル合計で数GB～）。** home配下の容量が厳しい環境では、
+    より大きい別ストレージ（groupストレージ等）に実体を置き、
+    `results/mesh`・`results/root`をそこへのsymlinkにするとよい
+    （各自の環境に応じて設定、実体のパスは環境ごとに異なる）。
+    `.gitignore`の`results/*`パターンはsymlink自体もパス名一致で無視する
+    ため、symlinkに変えても`git status`には出てこない。パス解決は透過的
     （`results/mesh/<baseName>/...`のようにこれまで通りアクセス可能）
-    なので、上記19番の前提も壊れない。新しい実行環境でこのリポジトリを
-    セットアップする場合は、このsymlinkが存在しないと`results/mesh`・
-    `results/root`が単なる空ディレクトリとして作られてしまう点に注意
-    （`geometry/build_*.py`等は`os.makedirs(..., exist_ok=True)`で
-    ディレクトリを作るだけなので、symlinkが無くても動く自体は動くが、
-    home配下の容量を消費してしまう）。
+    なので、上記19番の前提も壊れない。symlinkを使わない場合は
+    `geometry/build_*.py`等が`os.makedirs(..., exist_ok=True)`で普通の
+    ディレクトリを作るだけなので、そのままhome配下の容量を消費する。
 
 21. **`TApplication app("app", &argc, argv);`はargv自体を書き換えうる。** ROOT/X11
     が認識する自前のオプションをargvから取り除く仕様のため、`TApplication`を

@@ -323,12 +323,10 @@ with uproot.open("results/root/triple_gem_field_avalanche.root") as f:
 
 - `batch/bsub_utils.py` — `bsub`投入・`bjobs -a`による状態ポーリングの
   薄いラッパー。ジョブ数が増えても`bjobs`を1回だけ叩いてまとめて状態を
-  引く設計（`~/analyzer/JPARC2025E72/runmanager`のBJobManagerのアイデア
-  を参考にしたが、DST解析固有のrunlistスキーマ等は持ち込んでいない）。
-  投入コマンドは`bash -lc`でログインシェル経由にする
-  （`~/.bashrc`の`$LSB_JOBID`分岐でenvfsの代わりに本来のROOT/condaパスに
-  フォールバックする仕組みに乗るため、ノードローカルのenvfsマウントに
-  依存しない）。
+  引く設計。投入コマンドは`bash -lc`でログインシェル経由にする（実行環境
+  がノードごとに独自のキャッシュ/マウントの仕組みを使っている場合でも、
+  バッチジョブからは素の(キャッシュ等を経由しない)パス解決にフォール
+  バックできるようにするため。詳細は各自の実行環境に依存する）。
 - `batch/run_avalanche_batch.py` — 総イベント数をN個のジョブに分割し、
   各ジョブに`export_avalanche_trajectories`の新しい`eventOffset`引数
   （2026-09-24追加）で重複しないevent番号範囲を割り当てて`bsub`投入、
@@ -378,4 +376,3 @@ python3 batch/run_avalanche_batch.py ... --njobs 10
 - `README.md` — プロジェクト概要、対象デバイス、実行環境
 - `docs/debugging_notes.md` — GEM1→GEM2電子透過率問題の調査ログ（issue #2）
 - `docs/pipeline_gotchas.md` — Gmsh/Elmer/Garfield++連携で踏んだ落とし穴集
-- `CLAUDE.md` — AIエージェント向けエントリポイント
