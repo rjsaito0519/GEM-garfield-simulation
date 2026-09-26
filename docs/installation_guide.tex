@@ -404,21 +404,6 @@ defaults baked into this repository, the two files above are the only
 places that need editing -- there is no third, hidden place any of this
 is duplicated.
 
-\subsection{Optional: speeding up shell startup on a networked home directory}
-
-If your home directory is on a networked filesystem (e.g. GPFS/NFS) and
-you notice a large conda environment or ROOT installation making the
-\emph{first} \texttt{python}/\texttt{root} invocation of a session slow
-(tens of seconds, due to many small-file stat/open calls over the
-network), packing the environment into a single squashfs image and
-mounting it read-only under a node-local \texttt{/tmp} path is one
-effective fix. This project's own development machine uses exactly this
-approach (see \texttt{\textasciitilde/local/envfs\_README.md} outside
-this repository for that machine's specific implementation) -- it is a
-pure performance optimization, entirely optional, and orthogonal to
-everything else in this guide: batch (LSF) jobs are unaffected by it
-either way, since they always see the real, unmounted paths.
-
 \section{Verifying the full stack end-to-end}
 
 Once everything above is installed, confirm the whole pipeline actually
