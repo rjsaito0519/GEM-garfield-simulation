@@ -454,8 +454,9 @@ def main() -> None:
     # shortcut defaults to writing an RNTuple instead. `hadd`'s RNTuple
     # merge support crashed outright (SIGABRT in RNTupleMerger, 2026-09-25)
     # when folding a dict-assigned RNTuple into this file. A classic TTree
-    # is also consistent with every other tree in this project (see
-    # CLAUDE.md's "prefer ROOT (TTree)" convention) and merges cleanly.
+    # is also consistent with every other tree in this project (this is a
+    # ROOT/Garfield++ project -- TTree is the idiomatic format throughout,
+    # not RNTuple) and merges cleanly.
     # The real per-part seed, read back from each part's own RunInfo, NOT
     # job["seed"] -- that's this invocation's *expected* seed (base_seed +
     # index), and with --resume-run-id/--retry-indices, an invocation that
