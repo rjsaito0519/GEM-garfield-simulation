@@ -1,7 +1,6 @@
 """1D diagnostic plots along z: Ez(z), |E|(z), and an approximate Ne(z)
-(electron count vs. depth, from avalanche trajectories), see GitHub issue
-#3 step 4. Reuses the same data sources as plot_triple_gem.py -- no new
-C++/simulation work needed.
+(electron count vs. depth, from avalanche trajectories). Reuses the same
+data sources as plot_triple_gem.py -- no new C++/simulation work needed.
 
 Usage:
     python3 plot_z_profiles.py [baseName] [output.png]

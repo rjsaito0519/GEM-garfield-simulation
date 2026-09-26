@@ -31,15 +31,12 @@ IMG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 # GEM z-boundaries, for annotating the plots -- see triple_gem_field_model.py.
 # Placeholders; main() resolves these from the actual input file's own
 # RunInfoEndpoints (via _load_config_from_run_info) before anything below
-# reads them -- unlike analyze_plane_crossings.py/analyze_single_gem_plane_
-# crossings.py, this script used to always assume today's default
-# TripleGemTestConfig() matched whatever file it was pointed at, with no
-# check and no warning if it didn't (found in a 2026-09-27 code audit). Not
-# currently reachable with a wrong result -- every 3-GEM-stack file this
-# project can currently produce shares the same z-bands/hole radii as the
-# default -- but a future geometry catalog revision replotting an older
-# archived file would have silently used the wrong bands with nothing
-# printed to say so.
+# reads them, falling back to this module-level default (with a printed
+# warning) if the file has no usable run-info geometry. Every 3-GEM-stack
+# file this project can currently produce shares the same z-bands/hole
+# radii as this default, so the fallback is harmless today -- but a future
+# geometry catalog revision replotting an older archived file would use
+# the wrong bands here unless that warning is heeded.
 _CONFIG = TripleGemTestConfig()
 _Z_CENTERS = _layer_z_centers(_CONFIG)
 

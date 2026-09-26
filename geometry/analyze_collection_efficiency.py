@@ -1,6 +1,5 @@
 """Genuine collection efficiency for a single, standalone GEM foil test
-(single_gem_field / single_gem100_field), for the standardized per-stage
-efficiency table (GitHub issue #7 item 5).
+(single_gem_field / single_gem100_field).
 
 "Collection efficiency" in the literature sense (e.g. Sauli's GEM papers)
 means: of primary electrons drifting down uniformly from a wide area above
@@ -13,9 +12,10 @@ analyze_plane_crossings.py's "next-GEM collection" numbers for that
 cascade-context question instead, a genuinely different quantity).
 
 Requires export_avalanche_trajectories to have been run with a WIDE,
-uniform-area injection radius (r = R*sqrt(U), fixed 2026-09-24, GitHub
-issue #5 item 5) -- e.g. half the hole pitch, so injected primaries
-symmetrically split between this hole and its nearest neighbors. The
+uniform-area injection radius (r = R*sqrt(U), for a uniform areal
+distribution rather than a uniform radial one) -- e.g. half the hole
+pitch, so injected primaries symmetrically split between this hole and
+its nearest neighbors. The
 project's usual near-axis injection radius (a few um, used for gain/
 transmission diagnostics) is NOT wide enough to measure this; that
 convention already pre-selects primaries born essentially on-axis.

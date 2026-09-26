@@ -1,7 +1,7 @@
 """Per-event avalanche size (GetAvalancheSize()'s "ne": total electrons
 recorded in the avalanche tree, including ones later absorbed) and
-avalanche_size_limit truncation, for GitHub issue #12 items 1-2
-(avalanche_size_limit / collisionSteps convergence).
+avalanche_size_limit truncation -- used to check convergence of the
+avalanche_size_limit / collisionSteps simulation parameters.
 
 This is deliberately a different quantity from the "Local multiplication"
 number analyze_collection_efficiency.py prints (tracks/event among only the

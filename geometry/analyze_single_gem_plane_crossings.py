@@ -1,15 +1,15 @@
-"""Re-evaluation of the single-GEM100 transfer-field scan (2 vs 10 kV/cm)
-using the corrected genuine-plane-crossing metric from analyze_plane_crossings.py
-(see docs/debugging_notes.md, "2026-09-23: plane-crossing判定のバグ修正").
+"""Single-GEM100 transfer-field scan (2 vs 10 kV/cm) analyzed with the
+genuine-plane-crossing metric from analyze_plane_crossings.py (see
+docs/debugging_notes.md, "transfer電場scan（2 kV/cm → 10 kV/cm）").
 
-The original single-GEM100 transfer-field scan (docs/debugging_notes.md,
-"transfer電場scan（2 kV/cm → 10 kV/cm）") concluded "genuine hole-wall loss
-stays 100% inside the GEM foil's own z-band, 0 electrons reach the transfer
-gap, even at 5x transfer field" -- but that conclusion was based on each
-electron's final endpoint status/position (Endpoints tree), not on whether
-it ever genuinely crossed a plane on its way down. This script redoes that
-comparison with the same genuine per-segment plane-crossing definition used
-for the 3-GEM stack, on the "Trajectories" tree written by
+Classifying a track's fate purely from its final endpoint status/position
+(the Endpoints tree) can look like "genuine hole-wall loss stays 100%
+inside the GEM foil's own z-band, 0 electrons reach the transfer gap, even
+at 5x transfer field" without actually telling you whether any electron
+ever genuinely crossed a plane on its way down -- see
+analyze_plane_crossings.py's module docstring for why that distinction
+matters. This script applies the same genuine per-segment plane-crossing
+definition used for the 3-GEM stack to the "Trajectories" tree written by
 macros/export_avalanche_trajectories (status branch required).
 
 Unlike the 3-GEM stack analysis, there is no second GEM downstream here --
@@ -68,13 +68,13 @@ def _birth_region(z_val: float, z_gem_top: float, z_gem_bottom: float) -> str:
 def _load_geometry_from_run_info(root_path: str) -> tuple[float, float, float] | None:
     """(z_gem_top_cm, z_gem_bottom_cm, transfer_gap_cm), read from this
     file's own run-info tree's "model_info_json" entry via read_run_info()
-    (see macros/run_info.hh, GitHub issue #6 items 1-2) instead of assuming
-    a CLI-selected GEM_50UM/GEM_100UM catalog value and a hardcoded
-    _TRANSFER_GAP_CM still match whatever this file was actually built
-    with (e.g. a non-default transfer-field diagnostic run, see this
-    file's own module docstring). Returns None if unavailable (no run-info
-    tree, or an older model_info.json missing these fields) -- caller
-    falls back to the CLI/hardcoded path with its own warning.
+    (see macros/run_info.hh) instead of assuming a CLI-selected
+    GEM_50UM/GEM_100UM catalog value and a hardcoded _TRANSFER_GAP_CM still
+    match whatever this file was actually built with (e.g. a non-default
+    transfer-field diagnostic run, see this file's own module docstring).
+    Returns None if unavailable (no run-info tree, or an older
+    model_info.json missing these fields) -- caller falls back to the
+    CLI/hardcoded path with its own warning.
     """
     with uproot.open(root_path) as f:
         run_info = read_run_info(f)
@@ -101,8 +101,8 @@ def main() -> None:
     else:
         z_gem_top, z_gem_bottom = _gem_z_bounds(gem_type)
         transfer_gap_cm = _TRANSFER_GAP_CM
-        print(f"WARNING: this file has no usable RunInfo geometry (predates GitHub "
-              f"issue #6 item 1, or predates the geometry_info layer extension) -- "
+        print(f"WARNING: this file has no usable RunInfo geometry (produced by an "
+              f"older macro build, or predates the geometry_info layer extension) -- "
               f"falling back to GEM_{gem_type}UM's catalog thickness and the "
               f"hardcoded default transfer_gap_cm={_TRANSFER_GAP_CM}. This is NOT "
               f"verified to match the actual conditions this file was produced "
@@ -163,9 +163,8 @@ def main() -> None:
 
     print("Funnel within the GEM-extracted cohort (genuine crossings only):")
     # max(1, ...) not len(cohort) directly: an empty cohort (genuinely zero
-    # GEM-bottom crossings) is exactly the pathological case this script's
-    # own module docstring says happened for real in the original
-    # single-GEM100 transfer-field scan -- would otherwise raise
+    # GEM-bottom crossings) is exactly the pathological case described in
+    # this script's own module docstring -- would otherwise raise
     # ZeroDivisionError here instead of printing the funnel as all zeros.
     cohort_denom = max(1, len(cohort))
     prev_count = len(cohort)

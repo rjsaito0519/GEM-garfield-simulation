@@ -1,20 +1,19 @@
 """Time-animated GIF of one avalanche event's electron cloud growing through
-the 3-GEM stack, in 3D and as a side (x-z cross-section) view -- built at
-the user's request (2026-09-24, see docs/debugging_notes.md) to actually
-*see* the cascade develop over time, complementing the static cross-section
-PNGs from macros/view_gem_avalanche_cross_section.cpp.
+the 3-GEM stack, in 3D and as a side (x-z cross-section) view -- lets you
+actually *see* the cascade develop over time, complementing the static
+cross-section PNGs from macros/view_gem_avalanche_cross_section.cpp.
 
 Renders headless via matplotlib's Agg backend (no PyVista/VTK, so no
 off-screen-GL dependency -- this dev environment has neither an X server
-nor OSMesa, see docs/debugging_notes.md's PyVista verification notes).
+nor OSMesa).
 
 GEM geometry (copper electrodes with their tiled hole pattern) is drawn as
 flat z=const surfaces with the hole footprints masked out to NaN.
-IMPORTANT gotcha hit building this: matplotlib 3D's default depth-sort
-(computed_zorder=True) mis-orders multiple large overlapping flat surfaces
-at different z, making the copper render as almost entirely dark/washed
-out. Fixed by setting ax.computed_zorder = False and assigning an explicit
-zorder per surface (see draw_gem_geometry).
+matplotlib 3D's default depth-sort (computed_zorder=True) mis-orders
+multiple large overlapping flat surfaces at different z, making the
+copper render as almost entirely dark/washed out; worked around by setting
+ax.computed_zorder = False and assigning an explicit zorder per surface
+(see _draw_gem_geometry).
 
 Electron count panel: shows the actual live population at each instant
 (rises as new electrons are born via further avalanche multiplication,
@@ -27,17 +26,16 @@ Usage:
     label: text shown in the title (e.g. "1.15x voltage"); defaults to the
     root file's base name.
     --readme-demo: also copy the rendered GIF to results/img/avalanche_demo.gif
-    -- the fixed filename README.md embeds on GitHub's repo front page (2026-09-25).
-    That filename deliberately never changes so a better event found later can
-    just be re-rendered with this flag to replace it in place, without touching
-    README.md at all. This is the *only* GIF this project tracks in git (see
-    .gitignore) -- every other rendered animation, including the plain
-    <baseName>_event<N>_avalanche.gif this script always writes, stays untracked
-    like the rest of results/.
+    -- the fixed filename README.md embeds on GitHub's repo front page.
+    That filename deliberately never changes so a better event found later
+    can just be re-rendered with this flag to replace it in place, without
+    touching README.md at all. This is the *only* GIF this project tracks
+    in git (see .gitignore) -- every other rendered animation, including
+    the plain <baseName>_event<N>_avalanche.gif this script always writes,
+    stays untracked like the rest of results/.
 Output: results/img/<baseName>_event<N>_avalanche.gif -- one combined
-    animation, oblique and true side-on (elev=0) 3D panels side by side
-    sharing one electron-count panel below (2026-09-25: previously two
-    separate _3d.gif/_side.gif files).
+    animation, oblique and true side-on (elev=0) 3D panels side by side,
+    sharing one electron-count panel below.
 """
 
 import json
@@ -71,8 +69,9 @@ CU_COLOR = "#d98a3d"
 DIEL_COLOR = "#241a0d"
 ELECTRON_COLOR = np.array([1.0, 0.92, 0.15])
 # Fallback only, for a file with no run-info tree to read the real tiled
-# domain from (see _load_view_extent) -- matches the 5x5 tiling this
-# project used before issue #12 item 3's 7x7/9x9 convergence check.
+# domain from (see _load_view_extent) -- matches this project's original
+# 5x5-tiling default, from before wider convergence-check tilings (7x7,
+# 9x9) were introduced.
 _DEFAULT_VIEW_HALF_X, _DEFAULT_VIEW_HALF_Y = 360.0, 620.0  # um
 _DEFAULT_PITCH_CM, _DEFAULT_N_CELLS = 0.014, 5
 Z_MIN, Z_MAX = -0.2029, 0.430  # cm -- GND up to just above GEM1
@@ -82,13 +81,13 @@ _GRID_N = 320
 def _load_view_extent(root_path: str):
     """(view_half_x_um, view_half_y_um, pitch_cm, n_cells_x, n_cells_y),
     read from this file's own run-info tree's "model_info_json" entry
-    instead of the fixed 5x5-tiling defaults above -- those left the view
+    instead of the fixed 5x5-tiling defaults above -- those leave the view
     window (and the drawn GEM hole pattern) too narrow for a wider tiling
-    like 7x7/9x9, visibly clipping electrons at the frame edges (reported
-    2026-09-25, confirmed: ~20% of one 9x9 event's x-points and ~11% of its
-    y-points fell outside the old +-360/+-620um window). Falls back to
-    those defaults, with a warning, for an older file with no run-info tree
-    or no "geometry" half-extent in it.
+    like 7x7/9x9, visibly clipping electrons at the frame edges (for one
+    9x9 event, ~20% of its x-points and ~11% of its y-points fell outside
+    the old +-360/+-620um window). Falls back to those defaults, with a
+    warning, for an older file with no run-info tree or no "geometry"
+    half-extent in it.
     """
     with uproot.open(root_path) as f:
         run_info = read_run_info(f)
@@ -145,10 +144,11 @@ def _style_3d_axes(ax, view: str, view_half_x: float, view_half_y: float):
         # the GEM copper/dielectric surfaces render mostly invisible instead
         # of properly layered (see module docstring's computed_zorder note;
         # this is a further, separate mplot3d quirk at elev=0 specifically).
-        # A small nonzero elev (e.g. 4) avoided that, but the user asked for
-        # a genuinely true side-on view (2026-09-25) and is fine with the
-        # GEM structure not being visible here -- the side-by-side
-        # perspective panel still shows it. elev=0 it is.
+        # A small nonzero elev (e.g. 4) would avoid that, at the cost of not
+        # being a true side-on projection. This uses elev=0 for a genuine
+        # side view -- the GEM structure isn't visible here as a result, but
+        # the side-by-side perspective panel still shows it, so nothing is
+        # lost overall.
         ax.view_init(elev=0, azim=-90)
         ax.set_yticklabels([])  # y is the (hidden) depth axis in this view
     ax.set_facecolor("black")
@@ -191,15 +191,14 @@ def render(out_path: str, x, y, z, t, alive_times, alive_cum, label: str,
            view_half_x: float, view_half_y: float, pitch_cm: float, n_cells_x: int, n_cells_y: int,
            n_frames: int = 100, fps: int = 20, age_window_ns: float = 40.0):
     """One combined GIF: perspective (oblique) and true side-on (elev=0)
-    3D panels side by side, sharing one electron-count panel below --
-    replaces the earlier two-separate-GIF layout at the user's request
-    (2026-09-25), so the oblique and side views can be compared directly
-    without needing the GEM structure to stay visible in the side view.
+    3D panels side by side, sharing one electron-count panel below, so the
+    oblique and side views can be compared directly without needing the
+    GEM structure to stay visible in the side view.
 
     view_half_x/y, pitch_cm, n_cells_x/y: this event's actual tiled-domain
     extent and hole pattern (see _load_view_extent) -- NOT a fixed 5x5
-    assumption, which clipped electrons at the frame edges for a wider
-    tiling like 9x9 (reported 2026-09-25)."""
+    assumption, which clips electrons at the frame edges for a wider
+    tiling like 9x9."""
     holes_um = [(hx * 1e4, hy * 1e4) for hx, hy in hole_centers_tiled(pitch_cm, n_cells_x, n_cells_y)]
     holes_arr = np.array(holes_um)
     gx = np.linspace(-view_half_x, view_half_x, _GRID_N)
@@ -210,12 +209,12 @@ def render(out_path: str, x, y, z, t, alive_times, alive_cum, label: str,
     # Dense frames near BOTH ends of the timeline, coarser in the middle:
     # t=0 (entry into GEM1 + initial multiplication happen fast) needs dense
     # sampling, and so does the tail end (what happens after the cloud
-    # clears GEM3, into the induction gap -- reported 2026-09-25 as feeling
-    # rushed/cut short with the old dense-near-zero-only skew). The typical
-    # per-event time profile is a multiplication burst, a quiet decay
-    # stretch, then another burst near the next GEM -- the quiet stretches
-    # are the least visually interesting part, so that's where frames can
-    # be sparse. A smoothstep g(frac) = 3*frac^2 - 2*frac^3 has g'(0)=g'(1)=0
+    # clears GEM3, into the induction gap -- a dense-near-zero-only skew
+    # makes that part feel rushed and cut short). The typical per-event
+    # time profile is a multiplication burst, a quiet decay stretch, then
+    # another burst near the next GEM -- the quiet stretches are the least
+    # visually interesting part, so that's where frames can be sparse. A
+    # smoothstep g(frac) = 3*frac^2 - 2*frac^3 has g'(0)=g'(1)=0
     # (time barely advances per frame near either end -- i.e. dense sampling
     # there) and its steepest slope at frac=0.5 (time advances fastest
     # there -- sparse sampling in the middle), giving exactly that shape.
@@ -274,9 +273,9 @@ def render(out_path: str, x, y, z, t, alive_times, alive_cum, label: str,
         # event time happens to precede T, so during any stretch where the
         # population doesn't change the line visibly stops short of the
         # current time and then jumps forward once the next event finally
-        # occurs, looking like a broken/reconnecting line (reported
-        # 2026-09-25). The count is unchanged during that stretch, but a
-        # point still belongs at (T, n_alive) so the line is continuous.
+        # occurs, looking like a broken/reconnecting line. The count is
+        # unchanged during that stretch, but a point still belongs at
+        # (T, n_alive) so the line is continuous.
         alive_line.set_data(
             np.concatenate([[0.0], alive_times[:idx_alive], [T]]),
             np.concatenate([[0.0], alive_cum[:idx_alive], [n_alive]]),

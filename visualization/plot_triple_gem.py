@@ -1,6 +1,6 @@
 """PyVista-based 3D viewer: 3-GEM stack geometry + an electric-field slice,
-overlaid in one interactive scene (see GitHub issue #3). Exports a
-self-contained HTML file (client-side vtk.js rendering via trame/wslink --
+overlaid in one interactive scene. Exports a self-contained HTML file
+(client-side vtk.js rendering via trame/wslink --
 no server-side GPU/X needed to *view* it, only to build it, and even
 building it works fine off-screen since PyVista never actually rasterizes
 for this export path).
@@ -26,11 +26,11 @@ Usage:
     baseName defaults to "triple_gem_field"; output defaults to
     results/html/<baseName>_overview.html.
 
-Environment note: this environment's `vtk` pip wheel must be 9.3.x, not the
+Environment note: the `vtk` pip package must be pinned to 9.3.x, not the
 newest 9.7.x -- a real trame_vtk/vtk 9.7 incompatibility (TypeError:
 unhashable type 'VTKAOSArray_vtkFloatArray' inside trame_vtk's scene
-serializer) broke HTML export; downgrading to vtk==9.3.1 fixed it
-(2026-09-23, see ~/local/envfs_README.md).
+serializer) breaks HTML export; `pip install "vtk==9.3.1"` (after
+installing pyvista, so the pin takes effect) fixes it.
 """
 
 import json
@@ -168,13 +168,11 @@ def load_trajectories(root_path: str, max_points: int = 15_000) -> pv.PolyData |
     (see export_avalanche_trajectories.cpp's "Trajectories" tree).
 
     Downsampled to roughly max_points total points (per-track stride, always
-    keeping each track's first/last point so line topology stays intact) --
-    this is the "avalanche が大きい場合は...trajectory point のみ適度に
-    downsample する" requirement from GitHub issue #3, not implemented until
-    now. Without it, a several-hundred-event run produces an HTML file tens
+    keeping each track's first/last point so line topology stays intact).
+    Without this, a several-hundred-event run produces an HTML file tens
     of MB in size (client-side vtk.js embeds every point), which is both
     slow to open in a browser and too large to publish as a shareable
-    artifact -- see docs/debugging_notes.md, 2026-09-24 visualization check.
+    artifact.
     """
     with uproot.open(root_path) as f:
         arrays = f["Trajectories"].arrays(

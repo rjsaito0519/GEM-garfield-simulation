@@ -1,19 +1,18 @@
-"""Plane-crossing transmission analysis for the 3-GEM stack avalanche --
-v2, fixing a real methodology flaw in the first version (see below).
+"""Plane-crossing transmission analysis for the 3-GEM stack avalanche.
 
-## The flaw this version fixes
+## Genuine plane crossings vs. "recorded below the plane somewhere"
 
-The original version counted a track as having "crossed" a z-plane if
-`z.min() < z_threshold` anywhere in its recorded path. That is NOT the
-same as genuinely crossing the plane: a secondary electron *born* (created
-by ionization) already below the plane -- e.g. a new electron created by
-an avalanche happening inside GEM2's own hole -- trivially satisfies
-`z.min() < z_threshold` without ever having travelled down through it.
-This silently mixed "GEM1-origin electrons that made it to GEM2" together
-with "electrons freshly created near/inside GEM2", inflating the apparent
+A track's z-values dipping below a threshold at some point in its
+recorded path does NOT mean it genuinely crossed that plane: a secondary
+electron can be *born* (created by ionization) already below the plane --
+e.g. a new electron created by an avalanche happening inside GEM2's own
+hole -- which trivially satisfies `z.min() < z_threshold` without ever
+having travelled down through it. Thresholding on `z.min()` therefore
+mixes "GEM1-origin electrons that made it to GEM2" together with
+"electrons freshly created near/inside GEM2", inflating the apparent
 GEM1->GEM2 transmission.
 
-This version instead:
+This script instead:
   - Detects a *genuine downward crossing*: consecutive recorded points
     (z_i, z_{i+1}) with z_i >= z_threshold and z_{i+1} < z_threshold.
   - Records each track's *birth region* (which z-band its first recorded
@@ -25,16 +24,15 @@ This version instead:
     top-50um, GEM2 top-10um, GEM2 hole entrance) to localize *where*
     within the gap/GEM2 the cohort is actually lost.
   - Classifies the GEM1-extracted cohort's final fate using the
-    "Trajectories" tree's own "status" branch (added alongside this
-    script) plus each track's last recorded point, since gem_avalanche's
-    separate "Endpoints" tree has no per-track index to join against.
+    "Trajectories" tree's own "status" branch plus each track's last
+    recorded point, since gem_avalanche's separate "Endpoints" tree has
+    no per-track index to join against.
 
 Usage:
     python3 analyze_plane_crossings.py <avalanche.root>
 Input: the "Trajectories" tree written by macros/export_avalanche_trajectories
-       (event,track,x,y,z,t,energy,status) -- status was added alongside
-       this script version; re-run export_avalanche_trajectories first if
-       the ROOT file predates that.
+       (event,track,x,y,z,t,energy,status); re-run export_avalanche_trajectories
+       first if the ROOT file predates the status branch.
 
 Caveat (see docs/debugging_notes.md, "SetCollisionSteps"): points are only
 recorded every `collisionSteps` real collisions (macro default 100), so a
@@ -61,7 +59,8 @@ from triple_gem_field_model import (
     _layer_z_centers,
 )
 
-# GarfieldConstants.hh status codes seen in this project so far.
+# Garfield++ status codes (GarfieldConstants.hh) recognized here; extend
+# this dict as new ones are encountered.
 _STATUS_NAMES = {
     -1: "StatusLeftDriftArea (lateral sensor boundary)",
     -5: "StatusLeftDriftMedium (hit solid material)",
@@ -168,9 +167,9 @@ def require_trajectories_tree(f, root_path: str, required_branches: list[str]):
     """The "Trajectories" tree from an open uproot file, after checking it
     actually exists, has at least one entry, and has every branch the
     caller needs -- instead of letting a missing/empty/malformed input
-    surface as a confusing IndexError/KeyError deep inside the analysis
-    (GitHub issue #11 item 5). Shared by every script here that reads a
-    "Trajectories" tree, not just analyze_plane_crossings.py itself.
+    surface as a confusing IndexError/KeyError deep inside the analysis.
+    Shared by every script here that reads a "Trajectories" tree, not just
+    analyze_plane_crossings.py itself.
     """
     if "Trajectories" not in f:
         raise ValueError(
@@ -199,19 +198,17 @@ def _run_info_trees(f) -> list:
     """This file's own run-info TTree(s) -- normally just one
     ("RunInfoTrajectories" for export_avalanche_trajectories output,
     "RunInfoEndpoints" for gem_avalanche output, or the legacy shared
-    "RunInfo" name both replaced, GitHub issue #11 item 1), but a merged
-    batch file can legitimately have more than one of these side by side:
-    real, hit 2026-09-25, the 9x9 finite-geometry batch's jobs (issue #12
-    item 3) were already running when a mid-session rebuild picked up the
-    RunInfoTrajectories rename, so some parts wrote the old name and some
-    the new one, and hadd keeps same-named trees as-is -- it does NOT merge
-    trees with DIFFERENT names, so the merged file ends up with one
-    "RunInfo" tree (the pre-rebuild parts' rows) and one
-    "RunInfoTrajectories" tree (the rest) side by side, each covering only
-    part of the run. Returns every one of these three names that's actually
-    present in the file, not just the first found -- a caller that only
-    read one of them would silently miss rows/parts. Returns [] if the file
-    has none of them.
+    "RunInfo" name both replaced), but a merged batch file can legitimately
+    have more than one of these side by side: if a batch's worker jobs are
+    already running when the run-info tree name changes (e.g. a rename
+    picked up mid-batch), some parts write the old name and some the new
+    one, and `hadd` keeps same-named trees as-is -- it does NOT merge trees
+    with DIFFERENT names, so the merged file ends up with one "RunInfo"
+    tree (the pre-rename parts' rows) and one "RunInfoTrajectories" tree
+    (the rest) side by side, each covering only part of the run. Returns
+    every one of these three names that's actually present in the file,
+    not just the first found -- a caller that only read one of them would
+    silently miss rows/parts. Returns [] if the file has none of them.
     """
     return [f[name] for name in ("RunInfoTrajectories", "RunInfoEndpoints", "RunInfo") if name in f]
 
@@ -252,10 +249,9 @@ def read_run_info(f) -> dict[str, str]:
 
 def _load_config_from_run_info(root_path: str) -> TripleGemTestConfig | None:
     """Reconstruct the TripleGemTestConfig actually used for this run, read
-    from the run-info tree's "model_info_json" entry via read_run_info() (see
-    macros/run_info.hh, GitHub issue #6 items 1-2) instead of assuming
-    today's default TripleGemTestConfig() still matches whatever produced
-    this file.
+    from the run-info tree's "model_info_json" entry via read_run_info()
+    (see macros/run_info.hh) instead of assuming today's default
+    TripleGemTestConfig() still matches whatever produced this file.
 
     Returns None if the file has no run-info tree at all, or none of them
     carry "model_info_json" (predates that addition -- caller should fall
@@ -263,9 +259,9 @@ def _load_config_from_run_info(root_path: str) -> TripleGemTestConfig | None:
     they match).
 
     A batch-merged file (batch/run_avalanche_batch.py's hadd) has one
-    "RunInfoTrajectories" tree per merged part, all with the same model_info_json (only
-    per-job fields like rng_seed/n_events differ) -- using the first
-    occurrence is correct and deliberate, not an oversight.
+    "RunInfoTrajectories" tree per merged part, all with the same
+    model_info_json (only per-job fields like rng_seed/n_events differ),
+    so using the first occurrence is correct here.
     """
     with uproot.open(root_path) as f:
         run_info = read_run_info(f)
@@ -274,8 +270,8 @@ def _load_config_from_run_info(root_path: str) -> TripleGemTestConfig | None:
     model_info = json.loads(run_info["model_info_json"])
     g = model_info["geometry"]
     if "layers" not in g:
-        # model_info.json predates the per-layer geometry_info extension
-        # (2026-09-24) -- not enough metadata here to reconstruct a full
+        # model_info.json predates the per-layer geometry_info extension --
+        # not enough metadata here to reconstruct a full
         # TripleGemTestConfig (only pitch/half-extent/z-domain are
         # guaranteed present in an older file). Caller falls back to the
         # default-config path with its own warning.
@@ -289,7 +285,7 @@ def _load_config_from_run_info(root_path: str) -> TripleGemTestConfig | None:
                 # name ("GEM1"/"GEM2"/"GEM3"), not the underlying
                 # GemLayerParams.name ("GEM_100um"/"GEM_50um") -- cosmetic
                 # only, params.name isn't read by any z-position/pitch/
-                # radius calculation downstream (verified 2026-09-24).
+                # radius calculation downstream.
                 name=layer["name"],
                 pitch_cm=g["pitch_cm"],
                 hole_inner_radius_cm=layer["hole_inner_radius_cm"],
@@ -297,11 +293,11 @@ def _load_config_from_run_info(root_path: str) -> TripleGemTestConfig | None:
                 copper_thickness_cm=layer["copper_thickness_cm"],
                 dielectric_thickness_cm=layer["dielectric_thickness_cm"],
                 # .get() with a fallback, not layer[...]: this per-layer field
-                # was added slightly after "layers" itself (GitHub issue #6
-                # item 5), so a file built in between has "layers" but not
-                # this key. Not used by any z-position/pitch/radius
-                # calculation in this script, so a stale/default fallback
-                # value can't silently affect this script's actual output.
+                # was added slightly after "layers" itself, so a file built
+                # in between has "layers" but not this key. Not used by any
+                # z-position/pitch/radius calculation in this script, so a
+                # stale/default fallback value can't silently affect this
+                # script's actual output.
                 dielectric_relative_permittivity=layer.get("dielectric_relative_permittivity", 3.5),
             ),
             voltage_v=layer["voltage_v"],
@@ -339,8 +335,8 @@ def main() -> None:
               "(matches the actual simulation conditions).\n")
     else:
         config = dataclasses.replace(TripleGemTestConfig(), n_cells_x=n_cells, n_cells_y=n_cells)
-        print("WARNING: this file has no RunInfo tree (predates GitHub issue #6 "
-              "item 1) -- falling back to today's default TripleGemTestConfig() "
+        print("WARNING: this file has no RunInfo tree (produced by an older macro build) "
+              "-- falling back to today's default TripleGemTestConfig() "
               "(with n_cells overridden from the CLI). This is NOT verified to "
               "match the actual conditions this file was produced with; "
               "re-run export_avalanche_trajectories to get a RunInfo tree if "
@@ -364,18 +360,16 @@ def main() -> None:
               "branch addition) -- endpoint-fate classification skipped. "
               "Re-run export_avalanche_trajectories to get one.\n")
 
-    # Group rows by (event, track) via one stable sort instead of, for every
-    # unique key, re-scanning the *entire* flat array with a fresh boolean
-    # mask (event == ev) & (track == tr) -- that original approach is
-    # O(n_tracks * n_points) in both time and (because every one of those
-    # full-length boolean masks was cached in a dict for reuse later)
-    # memory, which is fine for a few thousand tracks but failed outright
-    # (ArrayMemoryError) on a 7x7-tiled, Penning-transfer-enabled run: 67498
-    # tracks x a 21.3M-point tree (2026-09-24, GitHub issue #7). np.lexsort
-    # is a stable sort, so within each resulting group the original
-    # recorded path order (point sequence) is preserved exactly, same as
-    # boolean-mask indexing was -- this is a pure performance/memory
-    # rewrite, not a change to any of the actual analysis logic below.
+    # Group rows by (event, track) via one stable sort. Re-scanning the
+    # entire flat array for every unique key with a fresh boolean mask
+    # (event == ev) & (track == tr) is O(n_tracks * n_points) in both time
+    # and memory (every full-length boolean mask ends up cached), which is
+    # fine for a few thousand tracks but runs out of memory
+    # (ArrayMemoryError) at the scale of a heavily tiled,
+    # Penning-transfer-enabled run (tens of thousands of tracks over a
+    # multi-million-point tree). np.lexsort is a stable sort, so within
+    # each resulting group the original recorded path order (point
+    # sequence) is preserved exactly, same as boolean-mask indexing gives.
     order = np.lexsort((track, event))
     event, track, x, y, z = event[order], track[order], x[order], y[order], z[order]
     if has_status:
@@ -426,13 +420,11 @@ def main() -> None:
           f"/ {n_total} ({100 * len(cohort) / n_total:.1f}% of all avalanche electrons)\n")
 
     print("Funnel within the GEM1-extracted cohort (genuine crossings only):")
-    # max(1, ...) not len(cohort) directly: an empty cohort (e.g. a run with
-    # genuinely zero GEM1-bottom crossings, which is exactly the pathological
-    # case this analysis exists to characterize -- real precedent in
-    # docs/debugging_notes.md's original single-GEM100 transfer-field scan)
-    # would otherwise raise ZeroDivisionError here instead of printing "0
-    # (0.0% of cohort)" for every stage, killing the script before any of
-    # the funnel is shown.
+    # max(1, ...) not len(cohort) directly: an empty cohort (e.g. a run
+    # with genuinely zero GEM1-bottom crossings -- exactly the pathological
+    # case this analysis exists to characterize) would otherwise raise
+    # ZeroDivisionError here instead of printing "0 (0.0% of cohort)" for
+    # every stage, killing the script before any of the funnel is shown.
     cohort_denom = max(1, len(cohort))
     prev_count = len(cohort)
     prev_label = "GEM1-extracted cohort"
