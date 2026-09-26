@@ -42,18 +42,18 @@ IMG_DIR = os.path.join(RESULTS_DIR, "img")
 # Optional CLI override: scale every GEM's own voltage (not the transfer/
 # drift/induction gap fields) by this factor, for the diagnostic "does a
 # much stronger internal GEM field recover per-stage gain/transmission"
-# question raised in docs/debugging_notes.md -- NOT a realistic operating
+# question (see docs/debugging_notes.md) -- NOT a realistic operating
 # point, purely a diagnostic to separate "extraction field too weak"
 # (already tested, no effect) from "the GEM hole's own field/gain is the
 # bottleneck". Encoded into the output base name, same convention as
 # build_single_gem100_field_mesh.py's transfer-field override.
 _VOLTAGE_MULTIPLIER = float(sys.argv[1]) if len(sys.argv) > 1 else 1.0
 # Optional CLI override for n_cells_x/n_cells_y (both, kept square), for the
-# tiling-density sensitivity check in docs/debugging_notes.md (2026-09-24):
-# the 3x3 tiling used everywhere else still leaves a sizeable lateral-
-# boundary-escape artifact (~51% of transfer-gap-1 losses in the
-# plane-crossing analysis) -- does 5x5 reduce it further? Must be odd, same
-# constraint as TripleGemTestConfig.n_cells_x/y.
+# tiling-density sensitivity check in docs/debugging_notes.md: the 3x3
+# tiling used everywhere else still leaves a sizeable lateral-boundary-
+# escape artifact (~51% of transfer-gap-1 losses in the plane-crossing
+# analysis) -- does 5x5 reduce it further? Must be odd, same constraint as
+# TripleGemTestConfig.n_cells_x/y.
 _N_CELLS = int(sys.argv[2]) if len(sys.argv) > 2 else 3
 _name_parts = ["triple_gem_field"]
 if _VOLTAGE_MULTIPLIER != 1.0:

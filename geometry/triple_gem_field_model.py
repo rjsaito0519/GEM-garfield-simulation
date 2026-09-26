@@ -1,18 +1,18 @@
 """Geometry + physical groups for the full 3-GEM stack:
 drift -> GEM1 -> transfer1 -> GEM2 -> transfer2 -> GEM3 -> induction -> pad plane.
 
-Stacking order and voltages confirmed with the user 2026-09-22: **100 -> 50
--> 50 um from the drift side**, which differs from Kim et al. 2020's
-published order (50 -> 50 -> 100 um from the drift side, see
-single_gem_field_model.py). Per-GEM-type numbers -- hole geometry (from that
+Stacking order is **100 -> 50 -> 50 um from the drift side**, intentionally
+different from Kim et al. 2020's published order (50 -> 50 -> 100 um from
+the drift side, see single_gem_field_model.py). Do not "correct" this to
+match the paper -- it is a deliberate design choice for this detector, not
+a transcription error. Per-GEM-type numbers -- hole geometry (from that
 paper's Table 1) and the rule that the 100 um GEM gets 1.5x the 50 um GEM's
 voltage -- are unchanged, just reassigned to the new stacking order.
 
 The drift gap is kept at the same modest 4.2 mm placeholder used in the
 single-GEM model, not HypTPC's real ~55 cm drift length: modeling the full
 drift volume adds nothing to the near-GEM field/avalanche physics this
-project cares about and would make the mesh far larger for no benefit (the
-user's own call, 2026-09-22, "いったんはほどほどでいいのかも").
+project cares about, and would make the mesh far larger for no benefit.
 
 Copper is modeled the same way as in the single-GEM case: a real 3D volume
 with a direct Dirichlet boundary condition on its full surface, not a
@@ -46,9 +46,9 @@ def stack_dielectric_relative_permittivity(layers: tuple) -> float:
     per-layer).
 
     Each layer's own GemLayerParams.dielectric_relative_permittivity is
-    still recorded per layer in geometry_info["layers"] as metadata (GitHub
-    issue #6 item 5), but the actual Elmer solve can only use one shared
-    value today. If the layers' values were ever set differently (e.g. a
+    still recorded per layer in geometry_info["layers"] as metadata, but
+    the actual Elmer solve can only use one shared value today. If the
+    layers' values were ever set differently (e.g. a
     future systematic study giving GEM_50UM/GEM_100UM distinct PI/LCP
     numbers) *without* also splitting the physical group per layer, using
     an arbitrary one of them here would be a silent physics bug -- so this
@@ -65,7 +65,7 @@ def stack_dielectric_relative_permittivity(layers: tuple) -> float:
             "using one of these values for all layers would silently misassign the "
             "others. Split the \"Dielectric\" physical group into one per layer "
             "(GEM1_Dielectric/GEM2_Dielectric/...) before giving layers distinct "
-            "permittivity values -- see GitHub issue #6 item 5."
+            "permittivity values."
         )
     return values.pop()
 
@@ -85,12 +85,12 @@ class TripleGemTestConfig:
         GemStackLayer("GEM3", GEM_50UM, 305.0),
     )
     # A single hole per layer has no neighboring hole for an electron that
-    # diffuses sideways during a GEM avalanche to end up in -- found
-    # 2026-09-22 that this makes essentially all secondary electrons hit the
-    # hole wall instead of reaching the next GEM (see the project memory
-    # notes). Tiling n_cells_x x n_cells_y real neighboring holes around the
-    # one everything (gas gaps, electron injection) is centered on gives
-    # them somewhere physically realistic to go. Must both be odd.
+    # diffuses sideways during a GEM avalanche to end up in, which makes
+    # essentially all secondary electrons hit the hole wall instead of
+    # reaching the next GEM. Tiling n_cells_x x n_cells_y real neighboring
+    # holes around the one everything (gas gaps, electron injection) is
+    # centered on gives them somewhere physically realistic to go. Must
+    # both be odd.
     n_cells_x: int = 3
     n_cells_y: int = 3
 
@@ -281,7 +281,7 @@ def build_triple_gem_field_model(config: TripleGemTestConfig) -> TripleGemFieldM
     # z-domain, unchanged above), also record the full simulation condition
     # here so analysis scripts can read it back instead of reconstructing a
     # fresh TripleGemTestConfig() that could silently drift out of sync with
-    # what was actually built (see GitHub issue #4/#6, 2026-09-24).
+    # what was actually built.
     layers_info = [
         {
             "name": layer.name,

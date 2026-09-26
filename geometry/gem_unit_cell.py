@@ -13,11 +13,10 @@ Unit cell convention (matches the classic hexagonal-hole GEM layout):
 
 Tiling multiple cells (hole_centers_tiled) exists because a *single* cell has
 no neighboring holes: an electron that diffuses sideways during a GEM
-avalanche has nowhere to go but a solid wall, which turns out to make
-essentially 100% of secondary electrons hit the hole wall in a single-cell
-model (found 2026-09-22 while debugging why no electrons were reaching GEM2
-in the 3-GEM stack -- see the project memory notes). A few real neighboring
-holes give those electrons somewhere physically realistic to end up.
+avalanche has nowhere to go but a solid wall, which makes essentially 100%
+of secondary electrons hit the hole wall in a single-cell model instead of
+passing through toward the next GEM. A few real neighboring holes give
+those electrons somewhere physically realistic to end up.
 """
 
 import math
@@ -72,9 +71,10 @@ def _cone_or_cylinder(
     """gmsh.model.occ.addCone(), except when r1 == r2: OCC's addCone
     rejects a cone with two identical radii ("cone with two identic
     radii") since that's degenerate -- geometrically just a cylinder, so
-    build one directly instead. Needed for the hole-taper sensitivity scan
-    (docs/debugging_notes.md, 2026-09-23): a cylindrical hole is the
-    inner_radius == outer_radius limit of the usual biconical taper."""
+    build one directly instead. This also makes inner_radius == outer_radius
+    a valid input (a straight cylindrical hole), the r1 == r2 limit of the
+    usual biconical taper -- useful for hole-taper sensitivity studies
+    (see docs/debugging_notes.md)."""
     if abs(r1 - r2) < 1.0e-9:
         return gmsh.model.occ.addCylinder(x0, y0, z0, 0.0, 0.0, height, r1)
     return gmsh.model.occ.addCone(x0, y0, z0, 0.0, 0.0, height, r1, r2)

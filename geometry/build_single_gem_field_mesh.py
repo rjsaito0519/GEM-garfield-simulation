@@ -16,7 +16,7 @@ import os
 import sys
 
 # matplotlib (via plot_utils) must be imported before gmsh -- see
-# env_gmsh_matplotlib_libstdcxx memory note / build_single_gem.py for why.
+# build_single_gem.py for why.
 from plot_utils import plot_mesh_cross_section
 
 import gmsh
@@ -47,8 +47,8 @@ IMG_DIR = os.path.join(RESULTS_DIR, "img")
 
 # Optional CLI override: scale the GEM's own voltage by this factor, for
 # the "does raising GEM2/GEM3-type voltage toward ~10x local gain change
-# the 3-GEM stack cascade" diagnostic (2026-09-24, see docs/debugging_notes.md)
-# -- same convention as build_single_gem100_field_mesh.py's multiplier.
+# the 3-GEM stack cascade" diagnostic (see docs/debugging_notes.md) -- same
+# convention as build_single_gem100_field_mesh.py's multiplier.
 _VOLTAGE_MULTIPLIER = float(sys.argv[1]) if len(sys.argv) > 1 else 1.0
 BASE_NAME = (
     "single_gem_field" if _VOLTAGE_MULTIPLIER == 1.0

@@ -3,16 +3,15 @@ conditions in the 3-GEM stack (100 um GEM, ΔV=457.5V) -- as opposed to
 build_single_gem_field_mesh.py, which uses the 50 um GEM's parameters
 (305V) left over from the original Milestone-2 test.
 
-Built to answer a specific debugging question (see docs/debugging_notes.md,
-"Step 4" of the user-provided investigation plan, 2026-09-22/23): is GEM1's
-near-zero electron transmission into the transfer gap a property of GEM1's
-own hole geometry/field in isolation, or does it depend on the rest of the
-3-GEM stack? This is a single, untiled hex unit cell (unlike the 3-GEM
-stack's 3x3 tiling) -- some of its own StatusLeftDriftMedium losses will
-include the single-cell domain-boundary-escape artifact (~16% in the
-triple-stack run, see docs/debugging_notes.md), which must be accounted for
-separately when interpreting the result, not conflated with genuine
-hole-wall loss.
+This isolates GEM1's own hole geometry/field from the rest of the 3-GEM
+stack, to distinguish whether GEM1's near-zero electron transmission into
+the transfer gap is a property of GEM1 in isolation or depends on GEM2/GEM3
+downstream (see docs/debugging_notes.md). This is a single, untiled hex
+unit cell (unlike the 3-GEM stack's 3x3 tiling), so some of its own
+StatusLeftDriftMedium losses will include the single-cell domain-boundary-
+escape artifact (~16% in the triple-stack run, see docs/debugging_notes.md)
+and must be accounted for separately when interpreting the result, not
+conflated with genuine hole-wall loss.
 
 Usage:
     python3 build_single_gem100_field_mesh.py [transfer_field_v_per_cm] [voltage_multiplier] [inner_diameter_um]
@@ -55,24 +54,22 @@ IMG_DIR = os.path.join(RESULTS_DIR, "img")
 
 # Optional CLI overrides for transfer_field_v_per_cm and the GEM's own
 # voltage, for diagnostic "does a stronger extraction/internal field
-# recover transmission" scans (see docs/debugging_notes.md, "Step 6" of
-# the user-provided investigation plan, and the 2026-09-23 GEM-voltage
-# follow-up) -- NOT meant to represent a real operating point, just to
-# test field-strength sensitivity. Encoded into the output base name so
-# each combination gets its own mesh/result dir instead of clobbering the
-# baseline single_gem100_field.
+# recover transmission" scans (see docs/debugging_notes.md) -- NOT meant to
+# represent a real operating point, just to test field-strength
+# sensitivity. Encoded into the output base name so each combination gets
+# its own mesh/result dir instead of clobbering the baseline
+# single_gem100_field.
 _TRANSFER_FIELD_V_PER_CM = float(sys.argv[1]) if len(sys.argv) > 1 else 2000.0
 _VOLTAGE_MULTIPLIER = float(sys.argv[2]) if len(sys.argv) > 2 else 1.0
 # Optional CLI override for the hole's inner (narrowest, mid-dielectric)
-# diameter [um], for the hole-taper sensitivity scan requested in
-# docs/debugging_notes.md (2026-09-23): is the current 65->35->65um
-# biconical/hourglass taper itself responsible for the near-total GEM1
-# extraction loss, versus a weaker taper or a fully cylindrical
-# (inner == outer, 65->65->65um) hole? Outer diameter (65um, the Cu-face
-# opening) is NOT varied here -- only the taper's narrowest point.
-# NOT meant to represent a confirmed real GEM1 geometry; see
-# docs/debugging_notes.md for what's actually established from literature
-# vs assumed here.
+# diameter [um], for the hole-taper sensitivity scan in
+# docs/debugging_notes.md: is the current 65->35->65um biconical/hourglass
+# taper itself responsible for the near-total GEM1 extraction loss, versus
+# a weaker taper or a fully cylindrical (inner == outer, 65->65->65um)
+# hole? Outer diameter (65um, the Cu-face opening) is NOT varied here --
+# only the taper's narrowest point. NOT meant to represent a confirmed real
+# GEM1 geometry; see docs/debugging_notes.md for what's actually
+# established from literature vs assumed here.
 _INNER_DIAMETER_UM = float(sys.argv[3]) if len(sys.argv) > 3 else 35.0
 _name_parts = ["single_gem100_field"]
 if _TRANSFER_FIELD_V_PER_CM != 2000.0:
@@ -82,12 +79,12 @@ if _VOLTAGE_MULTIPLIER != 1.0:
 if _INNER_DIAMETER_UM != 35.0:
     _name_parts.append(f"id{_INNER_DIAMETER_UM:g}")
 # Env var (not a CLI arg, to keep the positional-arg list stable) override
-# for Mesh.MeshSizeFromCurvature, for the mesh convergence test requested in
-# docs/debugging_notes.md (2026-09-24): does refining the mesh near the
-# hole's curved surfaces change the field/avalanche results at all?
-# Doubling this value roughly halves element size along curved surfaces
-# (unlike MeshSizeMin, which turned out NOT to be the binding constraint
-# near the hole -- see docs/debugging_notes.md for why).
+# for Mesh.MeshSizeFromCurvature, for the mesh convergence test in
+# docs/debugging_notes.md: does refining the mesh near the hole's curved
+# surfaces change the field/avalanche results at all? Doubling this value
+# roughly halves element size along curved surfaces (unlike MeshSizeMin,
+# which turned out NOT to be the binding constraint near the hole -- see
+# docs/debugging_notes.md for why).
 if os.environ.get("_MESH_CURVATURE_OVERRIDE"):
     _name_parts.append("meshtest" + os.environ["_MESH_CURVATURE_OVERRIDE"])
 BASE_NAME = "_".join(_name_parts)

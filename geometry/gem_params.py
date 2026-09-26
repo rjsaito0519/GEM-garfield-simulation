@@ -29,16 +29,16 @@ class GemLayerParams:
     # vs. LCP permittivity value yet, so both are currently set to the same
     # textbook insulator value (3.5) -- a deliberate placeholder, not a
     # claim that PI and LCP have identical permittivity. This field exists
-    # (instead of one shared module-level constant, as before) so a future
+    # per layer (instead of one shared module-level constant) so a future
     # systematic study can set them independently per GEM type without a
-    # structural change -- see GitHub issue #6 item 5. Single-GEM meshes
-    # (single_gem_field_model.py) use this value directly for their one
-    # dielectric body; the 3-GEM stack (triple_gem_field_model.py) still
-    # merges all layers' dielectric volumes into one shared Elmer material
-    # body, so it can only use one shared value today (see that file's
-    # _stack_dielectric_relative_permittivity for the consistency check
-    # this implies) -- fully separating per-layer values there would need
-    # splitting that physical group, a geometry change to discuss first.
+    # structural change. Single-GEM meshes (single_gem_field_model.py) use
+    # this value directly for their one dielectric body; the 3-GEM stack
+    # (triple_gem_field_model.py) still merges all layers' dielectric
+    # volumes into one shared Elmer material body, so it can only use one
+    # shared value today (see that file's stack_dielectric_relative_permittivity
+    # for the consistency check this implies) -- fully separating per-layer
+    # values there would require splitting that physical group into one per
+    # layer, a geometry change.
     dielectric_relative_permittivity: float
 
 
@@ -47,7 +47,7 @@ def _um_to_cm(value_um: float) -> float:
 
 
 # r/R in the reference paper's Table 1 are hole diameters (inner/outer),
-# confirmed with the user 2026-09-22 -- halved here to get radii.
+# not radii -- halved here to get the radii this dataclass stores.
 GEM_50UM = GemLayerParams(
     name="GEM_50um",
     pitch_cm=_um_to_cm(140.0),

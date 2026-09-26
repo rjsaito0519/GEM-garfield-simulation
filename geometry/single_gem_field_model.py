@@ -19,11 +19,11 @@ import gmsh
 from gem_params import GemLayerParams
 from gem_unit_cell import build_gem_layer, build_hole_gas_volumes, hole_centers_tiled
 
-# Relative permittivity of the GEM's dielectric insulator is now a field on
+# Relative permittivity of the GEM's dielectric insulator is a field on
 # GemLayerParams (gem_params.py) -- GEM_50UM (PI) vs. GEM_100UM (LCP) can be
-# set independently there, instead of sharing one constant here (GitHub
-# issue #6 item 5). This module used to define its own
-# DIELECTRIC_RELATIVE_PERMITTIVITY = 3.5; callers should use
+# set independently there, instead of sharing one constant here. This
+# module used to define its own DIELECTRIC_RELATIVE_PERMITTIVITY = 3.5;
+# callers should use
 # `gem_params.<GEM instance>.dielectric_relative_permittivity` instead.
 
 # Copper's permittivity value is irrelevant to the solution: every exposed
@@ -54,11 +54,11 @@ class SingleGemTestConfig:
     # A single hole has no neighboring hole for an electron that diffuses
     # sideways during a GEM avalanche to end up in, which makes the single
     # cell's own lateral (x/y) domain boundary a large, confounding loss
-    # channel (found 2026-09-23 while re-evaluating the transfer-field scan
-    # -- see docs/debugging_notes.md -- most "died in transfer gap" tracks
-    # sat right at this single cell's edge). Tiling n_cells_x x n_cells_y
-    # real neighboring holes around the one everything is centered on, same
-    # as triple_gem_field_model.py's TripleGemTestConfig, gives diffusing
+    # channel: most tracks classified as "died in transfer gap" actually sit
+    # right at this single cell's edge rather than genuinely stopping in the
+    # gas (see docs/debugging_notes.md). Tiling n_cells_x x n_cells_y real
+    # neighboring holes around the one everything is centered on, same as
+    # triple_gem_field_model.py's TripleGemTestConfig, gives diffusing
     # electrons somewhere physically realistic to go instead. Must both be
     # odd (tiling centered on one cell).
     n_cells_x: int = 3
@@ -226,7 +226,8 @@ def build_single_gem_field_model(
     # Beyond what C++/model_info.hh actually consume (pitch/half-extent/
     # z-domain, unchanged above), also record the full simulation condition
     # so analysis scripts can read it back rather than reconstructing a
-    # fresh SingleGemTestConfig() (see GitHub issue #4/#6, 2026-09-24).
+    # fresh SingleGemTestConfig() that could silently drift out of sync with
+    # what was actually built.
     geometry_info = {
         "pitch_cm": gem_params.pitch_cm,
         "half_extent_x_cm": half_extent_x_cm,
