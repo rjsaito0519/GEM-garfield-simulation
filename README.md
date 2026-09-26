@@ -133,6 +133,9 @@ docs/           詳細ドキュメント（下記「ドキュメント」参照�
 
 ## ドキュメント
 
+- `docs/installation_guide.pdf` (`docs/installation_guide.tex`) — Gmsh/Elmer/
+  Garfield++/ROOT/Pythonの詳細なインストール手順（バージョン互換性の制約、
+  ビルド順序、既知の落とし穴を含む）
 - `docs/reference.md` — パイプラインの実行手順、production condition再現、
   `results/`出力構成、ROOT出力スキーマ、efficiency定義
 - `docs/debugging_notes.md` — 開発中の調査ログ・仮説検証の記録（日付順）

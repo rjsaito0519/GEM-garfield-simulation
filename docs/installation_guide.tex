@@ -1,0 +1,441 @@
+\documentclass[11pt]{article}
+
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{titlesec}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!50!black,
+  urlcolor=blue!50!black,
+  citecolor=blue!50!black,
+}
+
+\definecolor{codebg}{RGB}{245,245,245}
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codebg},
+  columns=fullflexible,
+  breaklines=true,
+  frame=single,
+  framesep=4pt,
+  xleftmargin=2pt,
+  xrightmargin=2pt,
+  showstringspaces=false,
+}
+
+\titleformat{\section}{\normalfont\Large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalfont\large\bfseries}{\thesubsection}{1em}{}
+
+\title{GEM-garfield-simulation \\ \large Installation Guide}
+\author{}
+\date{Last verified: 2026-09-26}
+
+\begin{document}
+\maketitle
+
+\tableofcontents
+
+\section{Overview}
+
+This document is a detailed, step-by-step installation guide for the
+software stack that \texttt{GEM-garfield-simulation} depends on:
+\textbf{Gmsh} (geometry/mesh generation), \textbf{Elmer FEM}
+(electrostatic field solve), \textbf{Garfield++/Magboltz} (microscopic
+electron avalanche simulation), \textbf{ROOT} (I/O and, indirectly, the
+ABI that Garfield++ must be built against), and the \textbf{Python}
+environment used for analysis and visualization.
+
+\texttt{README.md} in the repository root gives the minimum a returning
+user needs (a version table and where paths are set); this document is
+the fuller reference for someone setting this stack up for the first
+time, or rebuilding a piece of it after an upgrade.
+
+\subsection{Why installation order matters}
+
+The one constraint that drives most of the pain in this stack is:
+\textbf{Garfield++ must be built against the exact same ROOT installation
+(same version, same compiler ABI) that everything else in the pipeline
+uses.} ROOT's dictionary-generation ABI changes between versions, so a
+Garfield++ build linked against ROOT~6.32 will fail to link against a
+ROOT~6.40 executable with errors like:
+
+\begin{lstlisting}
+undefined reference to `ROOT::TGenericClassInfo::TGenericClassInfo(...)'
+undefined reference to `TGeoBBox::ComputeNormal(...)'
+\end{lstlisting}
+
+There is no way around this other than keeping one consistent ROOT
+version and rebuilding Garfield++ against it whenever that version
+changes. The recommended order is therefore:
+
+\begin{enumerate}
+  \item Install ROOT first, and settle on the version you intend to keep.
+  \item Install Gmsh and Elmer (independent of ROOT/Garfield++).
+  \item Build Garfield++ against that same ROOT installation.
+  \item Set up the Python environment (independent, but see
+    Section~\ref{sec:python} for a real package-conflict gotcha).
+  \item Build this repository's own C++ macros against the same
+    ROOT + Garfield++ pair.
+\end{enumerate}
+
+\subsection{Versions verified to work together}
+
+The following combination is what this project is actually built and
+tested against (2026-09-26). Later point releases of any one component
+are not guaranteed to be compatible with the others without re-testing.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+Tool & Version \\
+\midrule
+Gmsh (CLI) & 4.13.1 \\
+Gmsh Python API (\texttt{pip install gmsh}) & 4.15.2 \\
+Elmer FEM & v9.0 \\
+Garfield++ & package version string ``0.3'' (built against ROOT below) \\
+ROOT & 6.40.04 \\
+CMake & 3.31.8 \\
+gcc & 11.5.0 (Red Hat 11.5.0-14) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{ROOT}
+
+Install ROOT first, since Garfield++'s build depends on it. Follow
+ROOT's own build instructions
+(\url{https://root.cern/install/build_from_source/}) for your platform;
+in short, for a from-source build:
+
+\begin{lstlisting}
+git clone --branch v6-40-04 --depth 1 https://github.com/root-project/root.git root_src
+mkdir root_build && cd root_build
+cmake -DCMAKE_INSTALL_PREFIX=$HOME/local/root/6.40.04 ../root_src
+cmake --build . -j"$(nproc)"
+cmake --install .
+\end{lstlisting}
+
+After installing, source ROOT's environment script before using it:
+
+\begin{lstlisting}
+source $HOME/local/root/6.40.04/bin/thisroot.sh
+root-config --version   # sanity check
+\end{lstlisting}
+
+This project does \emph{not} rely on \texttt{thisroot.sh} being sourced
+globally (e.g. from \texttt{.bashrc}) -- each script/build step sets the
+paths it needs explicitly (see Section~\ref{sec:paths}), so that the
+shell startup used for day-to-day work is not slowed down by always
+loading a full ROOT environment. Set it up however is convenient for your
+own workflow; just be consistent about which ROOT installation every
+other tool below is pointed at.
+
+\section{Gmsh}
+
+Two independent things are needed: the Gmsh CLI (only used incidentally;
+this project drives Gmsh almost entirely through its Python API) and the
+Gmsh Python module.
+
+\subsection{Gmsh CLI (optional)}
+
+Download a prebuilt binary from \url{https://gmsh.info/#Download} and
+extract it, e.g.:
+
+\begin{lstlisting}
+mkdir -p ~/local
+cd ~/local
+wget https://gmsh.info/bin/Linux/gmsh-4.13.1-Linux64.tgz
+tar xf gmsh-4.13.1-Linux64.tgz
+~/local/gmsh-4.13.1-Linux64/bin/gmsh --version
+\end{lstlisting}
+
+\subsection{Gmsh Python API (required)}
+
+\begin{lstlisting}
+pip install gmsh
+python3 -c "import gmsh; print(gmsh.__file__)"
+\end{lstlisting}
+
+The pip package's own bundled version (4.15.2 here) does not need to
+exactly match the standalone CLI's version above; they are independent
+installs and this project only actually calls the Python API at runtime.
+
+\textbf{Import-order gotcha:} in some conda/pip environments, importing
+\texttt{gmsh} before \texttt{matplotlib} in the same Python process
+causes
+\begin{lstlisting}
+ImportError: /usr/lib64/libstdc++.so.6: version `CXXABI_1.3.15' not found
+\end{lstlisting}
+Gmsh's native extension can pull in the system's older
+\texttt{libstdc++.so.6} first; once that specific shared object is loaded
+process-wide, matplotlib's compiled extension (which needs a newer
+libstdc++ ABI) can no longer load the version it actually needs. The fix
+is purely at the Python-import level: \textbf{always \texttt{import
+matplotlib} (or any module that imports it) before \texttt{import gmsh}}
+in any script that uses both. This project's own scripts already follow
+this convention; keep it if you add a new one that touches both.
+
+\section{Elmer FEM}
+
+Build from source (\url{http://www.elmerfem.org/blog/binaries/} also has
+prebuilt binaries for some platforms, but a from-source build is more
+portable across clusters):
+
+\begin{lstlisting}
+git clone https://github.com/ElmerCSC/elmerfem.git elmer_src
+mkdir elmer_build && cd elmer_build
+cmake -DCMAKE_INSTALL_PREFIX=$HOME/elmer \
+      -DWITH_MPI=OFF \
+      ../elmer_src
+cmake --build . -j"$(nproc)"
+cmake --install .
+\end{lstlisting}
+
+\texttt{-DWITH\_MPI=OFF} is a deliberate simplification here: this
+project's meshes are solved as a single linear system per run (not
+domain-decomposed), so MPI parallelism inside \texttt{ElmerSolver} is not
+needed, and a non-MPI build avoids an entire class of shared-library
+version-mismatch problems (e.g. a system \texttt{libmpi\_usempif08.so}
+mismatch) that a shared/central Elmer install on a cluster can otherwise
+run into. If your own environment already has a working MPI-enabled Elmer
+install, that works too; just confirm \texttt{ElmerSolver} actually runs
+(some shared HPC installs turn out to be broken in ways that only surface
+at runtime, not at link/install time).
+
+Verify with:
+\begin{lstlisting}
+export ELMER_HOME=$HOME/elmer
+export PATH="$ELMER_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$ELMER_HOME/lib:${LD_LIBRARY_PATH:-}"
+ElmerSolver -version
+\end{lstlisting}
+
+\section{Garfield++}
+
+Build from the official source
+(\url{https://gitlab.cern.ch/garfield/garfieldpp}), pointed explicitly at
+the ROOT installation from Section~2:
+
+\begin{lstlisting}
+git clone https://gitlab.cern.ch/garfield/garfieldpp.git garfieldpp_src
+mkdir -p garfieldpp_src/build && cd garfieldpp_src/build
+
+export ROOTSYS=$HOME/local/root/6.40.04
+export PATH="$ROOTSYS/bin:$PATH"
+export LD_LIBRARY_PATH="$ROOTSYS/lib:$LD_LIBRARY_PATH"
+
+cmake -DROOT_DIR="$ROOTSYS/cmake" \
+      -DCMAKE_INSTALL_PREFIX=$HOME/local/garfield \
+      ..
+cmake --build . -j"$(nproc)"
+cmake --install .
+\end{lstlisting}
+
+\subsection{Rebuilding after a ROOT upgrade}
+
+If ROOT is ever upgraded, Garfield++ \textbf{must} be rebuilt against the
+new installation (rerun the same \texttt{cmake}/\texttt{build}/
+\texttt{install} sequence above with \texttt{ROOTSYS} pointed at the new
+ROOT) -- reusing the old \texttt{libGarfield.so} against a newer ROOT is
+exactly the ABI mismatch described in Section~1.1. If the Garfield++
+install is shared with other projects, confirm with anyone else relying
+on it before rebuilding it in place.
+
+\subsection{A CMake gotcha worth knowing about in advance}
+
+On at least one system, a fresh \texttt{cmake ..} for a project
+consuming Garfield++ (including this repository's own
+\texttt{macros/CMakeLists.txt}) can silently resolve \texttt{ROOT\_DIR}
+back to a stale/wrong ROOT installation, even after
+\texttt{CMAKE\_PREFIX\_PATH} is set correctly. This happens because
+Garfield's own \texttt{GarfieldConfig.cmake} internally calls
+\texttt{find\_dependency(ROOT 6.0 COMPONENTS Geom Gdml)}, which can win
+the resolution race depending on what \texttt{CMAKE\_PREFIX\_PATH} was
+inherited from the environment. If \texttt{cmake ..}'s output reports the
+wrong ROOT under a line like \texttt{Found Vdt: ...}, force it
+explicitly:
+\begin{lstlisting}
+cmake -DROOT_DIR=$HOME/local/root/6.40.04/cmake ..
+\end{lstlisting}
+or add \texttt{set(ROOT\_DIR "..." CACHE PATH "" FORCE)} to the
+consuming project's own \texttt{CMakeLists.txt} right after its
+\texttt{CMAKE\_PREFIX\_PATH} is set (this repository's
+\texttt{macros/CMakeLists.txt} already does this -- see that file's own
+comments).
+
+\section{Python environment}
+\label{sec:python}
+
+Any Python 3 environment (conda, venv, or a plain \texttt{pip install
+--user}) works; this project does not depend on a specific environment
+manager. Install:
+
+\begin{lstlisting}
+pip install gmsh numpy matplotlib uproot pyvista plotly
+pip install "vtk==9.3.1"
+\end{lstlisting}
+
+\subsection{The \texttt{vtk} version pin (required)}
+
+Installing \texttt{pyvista} alone pulls in whatever the latest
+\texttt{vtk} wheel is. As of 2026-09, that is \texttt{9.7.x}, which is
+\textbf{incompatible} with \texttt{trame\_vtk} (the library
+\texttt{pyvista}'s HTML export path uses) and fails with:
+\begin{lstlisting}
+TypeError: unhashable type 'VTKAOSArray_vtkFloatArray'
+\end{lstlisting}
+while serializing a scene for HTML export (used by
+\texttt{visualization/plot\_triple\_gem.py}). Explicitly pinning
+\texttt{vtk==9.3.1} (after installing \texttt{pyvista}, so the pin takes
+effect) resolves this. If a future \texttt{trame\_vtk} release fixes the
+incompatibility, this pin can likely be relaxed -- but treat that as a
+deliberate, tested decision, not an assumption.
+
+\subsection{Versions this project is actually tested against}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+Package & Version \\
+\midrule
+numpy & 2.4.4 \\
+matplotlib & 3.10.9 \\
+uproot & 5.7.4 \\
+pyvista & 0.49.0 \\
+plotly & 7.1.0 \\
+vtk & 9.3.1 (pinned, see above) \\
+gmsh (Python) & 4.15.2 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Note: \texttt{uproot} (not PyROOT) is what this project's Python code
+uses to read ROOT files. PyROOT is deliberately not used here, so the
+Python environment's own version does not need to match ROOT's Python
+binding at all -- one less version constraint to track.
+
+\section{Building this project's C++ macros}
+
+Once ROOT, Garfield++, and Elmer are installed and consistent with each
+other:
+
+\begin{lstlisting}
+cd GEM-garfield-simulation/macros
+mkdir -p build && cd build
+cmake ..
+cmake --build . -j"$(nproc)"
+\end{lstlisting}
+
+\texttt{macros/CMakeLists.txt} points \texttt{CMAKE\_PREFIX\_PATH} at
+\texttt{\$HOME/local/garfield} and \texttt{\$HOME/local/root/6.40.04} by
+default -- edit those two paths at the top of that file if your own
+installation locations differ from this project's own development
+machine.
+
+If \texttt{cmake ..} reports the wrong ROOT (see
+Section~3.3), pass \texttt{-DROOT\_DIR=...} explicitly as shown there.
+
+\section{Where paths are set (no dependence on shell startup files)}
+\label{sec:paths}
+
+This project deliberately does \textbf{not} rely on \texttt{.bashrc} (or
+similar) exporting \texttt{ROOTSYS}, \texttt{ELMER\_HOME}, or
+\texttt{GARFIELD\_HOME} globally. Each entry point sets what it needs
+explicitly:
+
+\begin{itemize}
+  \item \texttt{elmer/run\_field\_solve.sh} exports
+    \texttt{ELMER\_HOME}/\texttt{PATH}/\texttt{LD\_LIBRARY\_PATH} itself
+    before invoking \texttt{ElmerGrid}/\texttt{ElmerSolver}.
+  \item \texttt{macros/CMakeLists.txt} sets \texttt{CMAKE\_PREFIX\_PATH}
+    (and, if needed, \texttt{ROOT\_DIR}) itself at configure time.
+  \item Python scripts read ROOT files via \texttt{uproot} (pure Python),
+    so they need no ROOT environment at all.
+\end{itemize}
+
+If you set up your own equivalents of these paths differently from the
+defaults baked into this repository, the two files above are the only
+places that need editing -- there is no third, hidden place any of this
+is duplicated.
+
+\subsection{Optional: speeding up shell startup on a networked home directory}
+
+If your home directory is on a networked filesystem (e.g. GPFS/NFS) and
+you notice a large conda environment or ROOT installation making the
+\emph{first} \texttt{python}/\texttt{root} invocation of a session slow
+(tens of seconds, due to many small-file stat/open calls over the
+network), packing the environment into a single squashfs image and
+mounting it read-only under a node-local \texttt{/tmp} path is one
+effective fix. This project's own development machine uses exactly this
+approach (see \texttt{\textasciitilde/local/envfs\_README.md} outside
+this repository for that machine's specific implementation) -- it is a
+pure performance optimization, entirely optional, and orthogonal to
+everything else in this guide: batch (LSF) jobs are unaffected by it
+either way, since they always see the real, unmounted paths.
+
+\section{Verifying the full stack end-to-end}
+
+Once everything above is installed, confirm the whole pipeline actually
+runs, from geometry generation through to Python analysis, using the
+\texttt{triple\_gem\_field} model (this exact command sequence is the
+one verified end-to-end in \texttt{docs/reference.md} \S2):
+
+\begin{lstlisting}
+cd GEM-garfield-simulation
+
+cd geometry && python3 build_triple_gem_field_mesh.py && cd ..
+cd elmer && bash run_field_solve.sh triple_gem_field && cd ..
+
+cd macros/build
+./export_avalanche_trajectories ../../results/mesh/triple_gem_field \
+  ../../resources/ar_ch4_90_10.gas 5 -0.2029 0.8405 0.4235 0.021 \
+  0.03637306695894642 0.1 0.0005 ../../results/root
+cd ../..
+
+python3 visualization/plot_triple_gem.py triple_gem_field
+python3 geometry/analyze_plane_crossings.py \
+  results/root/triple_gem_field_avalanche.root
+\end{lstlisting}
+
+A successful run produces
+\texttt{results/root/triple\_gem\_field\_avalanche.root},
+\texttt{results/html/triple\_gem\_field\_overview.html}, and prints a
+funnel/summary from the last command with no Python traceback. See
+\texttt{docs/reference.md} for what each pipeline stage's CLI arguments
+mean (including how to compute them for a different mesh/model) and how
+to run the full 7\texttimes{}7 production configuration.
+
+\section{Summary of known compatibility pitfalls}
+
+\begin{itemize}
+  \item \textbf{Garfield++ / ROOT ABI}: must be built against the exact
+    same ROOT version; rebuild Garfield++ after any ROOT upgrade
+    (Section~3.1).
+  \item \textbf{CMake resolving the wrong ROOT\_DIR}: force it explicitly
+    if a fresh \texttt{cmake ..} picks the wrong one (Section~3.3).
+  \item \textbf{\texttt{gmsh} vs \texttt{matplotlib} import order}: always
+    import matplotlib-touching modules before \texttt{gmsh} in the same
+    process (Section~3, Gmsh).
+  \item \textbf{\texttt{vtk} version}: pin to \texttt{9.3.1}; the latest
+    wheel breaks \texttt{pyvista}'s HTML export (Section~6.1).
+  \item \textbf{Elmer with MPI on a shared/HPC install}: confirm
+    \texttt{ElmerSolver} actually runs at runtime, not just that it built
+    -- a broken shared MPI runtime can pass CMake/link steps and still
+    fail with a shared-library error the first time it is actually
+    invoked (Section~4).
+\end{itemize}
+
+For gotchas encountered building and running the pipeline itself (as
+opposed to installing the underlying tools), see
+\texttt{docs/pipeline\_gotchas.md} in this repository.
+
+\end{document}
