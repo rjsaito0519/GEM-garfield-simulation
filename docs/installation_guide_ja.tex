@@ -115,6 +115,32 @@ gcc & 11.5.0 (Red Hat 11.5.0-14) \\
 \end{tabular}
 \end{table}
 
+\subsection{システムレベルのコンパイラ要件}
+
+以下のビルドを始める前に、システムに以下が揃っていることを確認する:
+\begin{itemize}
+  \item C++17対応のC++コンパイラ(ここでは\texttt{gcc}/\texttt{g++}
+    11.5.0。比較的新しいgcc/clangであれば何でもよい)、
+  \item Fortranコンパイラ(\texttt{gfortran})、
+  \item CMake 3.16以上。
+\end{itemize}
+Fortranコンパイラは見落としやすい: Garfield++自身の
+\texttt{CMakeLists.txt}は無条件に\texttt{project(... LANGUAGES
+Fortran CXX)}を宣言しており、これはMagboltz(Garfield++が呼び出す
+ガス輸送計算コード)がFortranで書かれているためである――Fortran
+コンパイラが無いと、Garfield++のビルドは\texttt{cmake}の段階で
+即座に失敗し、エラーメッセージにFortranコンパイラのチェック名が
+現れる。
+
+\textbf{GSL(GNU Scientific Library)はここでは不要である}――一部の
+古いGarfield++のドキュメント/メモがこれを前提条件として挙げている
+ことがあるが、これはGarfield++自身の\texttt{CMakeLists.txt}
+(\texttt{option(GARFIELD\_WITH\_GSL "Build Garfield++ with GSL
+(useless if C++>=17)" OFF)}――C++17より古い標準でビルドする場合のみ
+有効化・必須になる)を実際に確認して確定させた。本プロジェクトの
+Garfield++ビルドは一貫してC++17を使用しているため、GSLはインストール
+もリンクもされない。
+
 \section{ROOT}
 
 Garfield++のビルドがROOTに依存するため、まずROOTをインストールする。
@@ -427,6 +453,10 @@ python3 geometry/analyze_plane_crossings.py \
 \section{既知の互換性の落とし穴まとめ}
 
 \begin{itemize}
+  \item \textbf{Fortranコンパイラの不足}: \texttt{gfortran}が無いと
+    Garfield++のビルドは\texttt{cmake}の段階で即座に失敗する
+    (Magboltzの実体がFortranのため)。GSLは、古いドキュメントの
+    記載に反して、C++17ビルドでは不要(セクション1.3)。
   \item \textbf{Garfield++ / ROOTのABI}: 使うROOTと厳密に同じ
     バージョンに対してビルドされていなければならない。ROOTを
     アップグレードしたら必ずGarfield++を再ビルドする(セクション5.1)。

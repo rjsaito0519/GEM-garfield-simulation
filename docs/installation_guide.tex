@@ -118,6 +118,30 @@ gcc & 11.5.0 (Red Hat 11.5.0-14) \\
 \end{tabular}
 \end{table}
 
+\subsection{System-level compiler prerequisites}
+
+Before building anything below, confirm the system has:
+\begin{itemize}
+  \item a C++ compiler supporting C++17 (\texttt{gcc}/\texttt{g++} 11.5.0
+    here; any reasonably recent gcc/clang works),
+  \item a Fortran compiler (\texttt{gfortran}), and
+  \item CMake $\geq$ 3.16.
+\end{itemize}
+The Fortran compiler is easy to miss: Garfield++'s own
+\texttt{CMakeLists.txt} declares \texttt{project(... LANGUAGES Fortran
+CXX)} unconditionally, since Magboltz (the gas-transport code Garfield++
+calls into) is written in Fortran -- the Garfield++ build fails
+immediately at the \texttt{cmake} step without one, with an error
+naming the Fortran compiler check.
+
+\textbf{GSL (GNU Scientific Library) is not needed here}, despite some
+older Garfield++ documentation/notes listing it as a prerequisite --
+confirmed by reading Garfield++'s own \texttt{CMakeLists.txt}
+(\texttt{option(GARFIELD\_WITH\_GSL "Build Garfield++ with GSL (useless
+if C++>=17)" OFF)}, only switched on and required when building with a
+C++ standard older than 17). This project's Garfield++ build already
+uses C++17 throughout, so GSL is neither installed nor linked.
+
 \section{ROOT}
 
 Install ROOT first, since Garfield++'s build depends on it. Follow
@@ -427,6 +451,10 @@ to run the full 7\texttimes{}7 production configuration.
 \section{Summary of known compatibility pitfalls}
 
 \begin{itemize}
+  \item \textbf{Missing Fortran compiler}: Garfield++'s build fails
+    immediately at \texttt{cmake} without \texttt{gfortran} (Magboltz is
+    Fortran); GSL, despite older documentation, is not needed with a
+    C++17 build (Section~1.3).
   \item \textbf{Garfield++ / ROOT ABI}: must be built against the exact
     same ROOT version; rebuild Garfield++ after any ROOT upgrade
     (Section~3.1).
