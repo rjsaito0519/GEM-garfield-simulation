@@ -159,3 +159,174 @@ docs/           詳細ドキュメント（下記「ドキュメント」参照�
 （`elmer/run_field_solve.sh`, `macros/CMakeLists.txt`が実際に使っているパスの
 定義箇所）。Garfield++の再ビルド手順（ROOTバージョンを上げた場合など）は
 `docs/pipeline_gotchas.md`を参照。
+
+---
+
+# GEM-garfield-simulation (English)
+
+A framework for simulating the electrostatics and electron avalanche
+(avalanche/transport) of a Triple-GEM detector. Targets the 3-stage GEM
+stack of J-PARC E72 (HypTPC), with an eye toward a future Glass GEM
+extension.
+
+Main tools used: **Gmsh** (geometry/mesh) → **Elmer FEM** (electrostatic
+solve) → **Garfield++ / Magboltz** (microscopic avalanche simulation) →
+**Python** (uproot/matplotlib/PyVista, analysis and visualization).
+
+Built independently, taking inspiration from the design philosophy of
+`GEM_Garfield` (https://github.com/hyptpc/GEM_Garfield) (generating
+Gmsh/Elmer input in a parameter-driven way).
+
+![Electron avalanche animation](results/img/avalanche_demo.gif)
+
+Above: one event's worth of electron avalanche passing through the
+3-stage GEM stack (an oblique view and a straight-on cross section side
+by side, with the instantaneous electron count shown below). Generated
+by `visualization/plot_avalanche_animation.py` (see that script's own
+docstring for how to reproduce/regenerate it).
+
+## Target device
+
+The 3-stage GEM stack of HypTPC (shared by J-PARC E42/E45/E72).
+Source: S.H. Kim et al., "Development of a time projection chamber for
+J-PARC hadron physics program", J. Phys.: Conf. Ser. 1498 (2020) 012023.
+
+- 3-layer stack: 100 µm GEM → 50 µm GEM → 50 µm GEM (drift side to pad
+  side. A different stacking order from Kim et al. 2020's own 50→50→100µm)
+- Gas: P-10 (Ar 90% + CH4 10%), 1 atm
+
+See `geometry/gem_params.py`, `geometry/*_field_model.py` for detailed
+parameters.
+
+## Current production condition
+
+| Item | Value |
+|---|---|
+| GEM stack | 100µm(GEM1, drift side) → 50µm(GEM2) → 50µm(GEM3, pad side) |
+| GEM voltage | GEM1 = 526.125 V, GEM2/GEM3 = 350.75 V (after applying the 1.15x voltage multiplier) |
+| Drift / Transfer / Induction field | 130 / 2000 / 3100 V/cm |
+| Gas | P-10 (Ar 90% + CH4 10%), 1 atm, Penning transfer enabled |
+| Tiling | 7×7 (`triple_gem_field_v1.15x_n7`), convergence confirmed against 9×9 |
+| Avalanche size limit | 20000 (`EnableAvalancheSizeLimit`) |
+| baseName | `triple_gem_field_v1.15x_n7` |
+
+See `docs/validation.md` for the rationale behind each value and
+convergence-check details. The full command sequence to reproduce it is
+in `docs/reference.md`, "現在のproduction condition" (§2.5).
+
+## Workflow
+
+```
+Geometry generation (Gmsh Python API) → mesh
+  → Elmer (ElmerGrid/ElmerSolver, electrostatic solve) → Garfield++ (electron avalanche simulation)
+  → Python visualization/analysis (PyVista/matplotlib/uproot)
+```
+
+What each stage outputs: Gmsh → `.msh` mesh, Elmer → field solution
+(`.result`), Garfield++ → ROOT (`Endpoints`/`Trajectories` tree), Python →
+images/interactive HTML. See `docs/reference.md` §1-2 for details.
+
+## Quick start
+
+An example of running the whole pipeline for `triple_gem_field` (3-stage
+GEM, baseline settings) (the C++ macros need to be built first, see
+`docs/reference.md`, "C++マクロのビルド"):
+
+```bash
+# 1. Geometry/mesh generation
+cd geometry && python3 build_triple_gem_field_mesh.py
+
+# 2. Elmer electrostatic solve
+cd ../elmer && bash run_field_solve.sh triple_gem_field
+
+# 3. Compute the full electron avalanche trajectories (Garfield++)
+cd ../macros/build
+./export_avalanche_trajectories ../../results/mesh/triple_gem_field \
+  ../../resources/ar_ch4_90_10.gas 5 -0.2029 0.8405 0.4235 0.021 \
+  0.03637306695894642 0.1 0.0005 ../../results/root
+
+# 4. Visualization/analysis
+cd ../../visualization && python3 plot_triple_gem.py triple_gem_field
+cd ../geometry && python3 analyze_plane_crossings.py \
+  ../results/root/triple_gem_field_avalanche.root
+```
+
+See `docs/reference.md` §2 for what `zSensorMin` etc. mean and how to
+derive their values. The full reproduction command for the 3-stage GEM
+production condition is in the same file's §2.5. Parallel execution on
+the KEKCC LSF batch system is `batch/run_avalanche_batch.py` (see that
+script's own docstring and `docs/reference.md` §5 for details).
+
+## Repository structure
+
+```
+geometry/       Geometry/mesh generation via the Gmsh Python API, plus analysis scripts (plane-crossing, etc.)
+elmer/          .sif generation script, dielectric-constant definitions, etc.
+macros/         Garfield++ execution macros (single-GEM tests, 3-GEM production, etc.) + CMake build config
+include/        Vendored third-party headers for the C++ macros (nlohmann/json)
+visualization/  PyVista-based 3D visualization, diagnostic plots, avalanche animation
+batch/          Parallelizing avalanche computation on KEKCC (LSF/bsub)
+resources/      Gas tables (P10), etc.
+results/        Output of every pipeline stage (mesh/root/img/html/json)
+docs/           Detailed documentation (see "Documentation" below)
+```
+
+## Outputs
+
+Organized under `results/` by file type (see `docs/reference.md` §3 for
+details):
+
+- `results/mesh/` — Gmsh output mesh, Elmer solve results
+- `results/root/` — electron endpoint/trajectory data (ROOT TTree, readable with `uproot`)
+- `results/img/` — static verification images/GIF animations (only `*.png` and `avalanche_demo.gif` are tracked in git; everything else is regenerable)
+- `results/html/` — PyVista interactive 3D viewer
+- `results/json/` — geometry/field sample metadata
+
+## Current status
+
+- Triple-GEM geometry, field calculation, avalanche simulation: working
+- Parallel execution on KEKCC batch (bsub): working
+- Stage-by-stage transmission analysis (plane-crossing analysis): working
+- Python visualization layer (geometry/field/avalanche overlay, z-direction diagnostic plots): working
+- Finite-size (tiling) convergence: confirmed converged at 7×7 (compared against 9×9)
+- Avalanche size limit convergence: confirmed converged at 20000 (confirmed by directly comparing against 50000 on the production condition itself (n7/n9, 50 events each); see `docs/validation.md` for details)
+- Production-level absolute gain validation (voltage scan, literature comparison): in progress ([issue #15](https://github.com/rjsaito0519/GEM-garfield-simulation/issues/15))
+
+## Known limitations
+
+- **Injection condition**: primary electrons are currently injected with a simplified distribution near the GEM1 hole axis (for diagnostic purposes; does not reproduce the real detector's post-drift/diffusion distribution)
+- **Periodic boundary condition**: not implemented (currently approximated with a finite tile, [issue #15](https://github.com/rjsaito0519/GEM-garfield-simulation/issues/15))
+- **Dielectric approximation**: the dielectric layer is modeled only via its relative permittivity (detailed structure is simplified)
+
+## Documentation
+
+- `docs/installation_guide.pdf` (Japanese version: `docs/installation_guide_ja.pdf`.
+  LaTeX sources are `docs/installation_guide.tex` /
+  `installation_guide_ja.tex` respectively) — detailed installation steps
+  for Gmsh/Elmer/Garfield++/ROOT/Python (including version-compatibility
+  constraints, build order, and known pitfalls)
+- `docs/reference.md` — how to run the pipeline, reproducing the production condition,
+  the `results/` output layout, ROOT output schemas
+- `docs/validation.md` — the full production baseline configuration, convergence-check results,
+  definitions of physical quantities such as efficiency
+- `docs/debugging_notes.md` — development investigation log / hypothesis-testing record (chronological)
+- `docs/pipeline_gotchas.md` — a collection of pitfalls hit integrating Gmsh/Elmer/Garfield++/ROOT/Python
+- Main related GitHub Issues: [#15](https://github.com/rjsaito0519/GEM-garfield-simulation/issues/15) (periodic boundary, voltage scan, literature comparison -- future work)
+
+## Environment
+
+| Tool | Version |
+|---|---|
+| Gmsh (CLI) | 4.13.1 |
+| Gmsh Python API | 4.15.2 |
+| Elmer | v9.0 |
+| Garfield++ | package version string "0.3" (built for ROOT 6.40.04) |
+| ROOT | 6.40.04 (unified between Python/analysis use and the Garfield++ build) |
+| CMake | 3.31.8 |
+| gcc | 11.5.0 |
+
+All of these are installed locally under this execution account, and
+their paths are environment-specific (see where `elmer/run_field_solve.sh`
+and `macros/CMakeLists.txt` actually define the paths they use). See
+`docs/pipeline_gotchas.md` for the Garfield++ rebuild procedure (e.g. when
+upgrading the ROOT version).
