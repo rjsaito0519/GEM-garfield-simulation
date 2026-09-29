@@ -110,7 +110,7 @@ int main(int argc, char* argv[]) {
     aval.AvalancheElectron(x0, y0, zInjection, 0., e0, 0., 0., -1.);
     int ne = 0, ni = 0;
     aval.GetAvalancheSize(ne, ni);
-    std::cout << "Event " << i << "/" << nEvents << ": gain = " << ne << "\n";
+    std::cout << "Event " << i << "/" << nEvents << ": avalanche size = " << ne << "\n";
   }
 
   ViewFEMesh meshView;

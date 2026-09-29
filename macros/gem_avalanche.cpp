@@ -323,7 +323,7 @@ int main(int argc, char* argv[]) {
     gains.push_back(ne);
     const bool atCap = ne >= kAvalancheSizeLimit;
     if (atCap) ++nEventsAtCap;
-    std::cout << "Event " << i << "/" << nEvents << ": gain = " << ne
+    std::cout << "Event " << i << "/" << nEvents << ": avalanche size = " << ne
                << (atCap ? " [AVALANCHE SIZE LIMIT HIT -- truncated]" : "") << "\n";
 
     // Tally why each secondary electron's drift line ended (see

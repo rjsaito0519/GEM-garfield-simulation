@@ -7,11 +7,14 @@ This isolates GEM1's own hole geometry/field from the rest of the 3-GEM
 stack, to distinguish whether GEM1's near-zero electron transmission into
 the transfer gap is a property of GEM1 in isolation or depends on GEM2/GEM3
 downstream (see docs/debugging_notes.md). This is a single, untiled hex
-unit cell (unlike the 3-GEM stack's 3x3 tiling), so some of its own
-StatusLeftDriftMedium losses will include the single-cell domain-boundary-
-escape artifact (~16% in the triple-stack run, see docs/debugging_notes.md)
-and must be accounted for separately when interpreting the result, not
-conflated with genuine hole-wall loss.
+unit cell -- unlike the 3-GEM stack, whose production baseline is 7x7-tiled
+(via build_triple_gem_field_mesh.py's CLI n_cells override; its
+TripleGemTestConfig default is still 3x3, kept for the lightest diagnostic
+runs -- see docs/debugging_notes.md's tile-convergence history) -- so some
+of its own StatusLeftDriftMedium losses will include the single-cell
+domain-boundary-escape artifact (~16% in the triple-stack run, see
+docs/debugging_notes.md) and must be accounted for separately when
+interpreting the result, not conflated with genuine hole-wall loss.
 
 Usage:
     python3 build_single_gem100_field_mesh.py [transfer_field_v_per_cm] [voltage_multiplier] [inner_diameter_um]
