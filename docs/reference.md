@@ -127,50 +127,9 @@ python3 analyze_plane_crossings.py \
 `analyze_plane_crossings.py`はn_cells等の幾何条件を自動で読み取る
 （末尾の明示的なn_cells引数は不要、GitHub issue #6 item 2）。
 
-**2026-09-25時点で解消: production limitは`avalanche_size_limit=20000`
-を使用する。** `EnableAvalancheSizeLimit(2000)`がPenning transfer有効化後
-は頻繁に到達していた問題（このproduction条件で50イベント中28イベントが
-到達）を受け、GitHub issue #12 item 1として`triple_gem_field_v1.15x_n5`上
-で2000/5000/10000/20000の小統計(各10-20イベント)sweepを実施:
-
-| avalanche_size_limit | limit到達割合 | avalanche size (mean/median/max) |
-|---|---|---|
-| 2000  | 2/20 (10.0%) | 773.5 / 362.5 / 2005 |
-| 5000  | 0/20 (0.0%)  | 1120.5 / 947.5 / 3635 |
-| 10000 | 0/20 (0.0%)  | 716.1 / 423.0 / 3037 |
-| 20000 | 0/20 (0.0%)  | 553.5 / 288.5 / 2318 |
-
-limit到達割合は5000以上で0%に落ち、GEM1-extracted cohortの各funnel段
-(GEM1 extraction, GEM2 hole entrance, GEM2 bottom, 等 -- `analyze_plane_crossings.py`
-出力)の比率もlimit値に対して系統的な傾向は見られず、10-20イベントの統計
-誤差内で一致した（詳細はissue #12のコメント参照）。よって
-`avalanche_size_limit=20000`（9x9のfinite geometry convergence run
-[issue #12 item 3]で既に使用中）を今後の production limitとして採用する。
-**ただし各点10-20イベントと統計が小さく、厳密な収束証明ではなく「傾向として
-問題なし」という判断である点に注意。**
-
-**2026-09-30追記: production configuration本体(n7/n9、各50イベント)で
-`avalanche_size_limit=50000`との直接比較を実施、issue #18項目1。**
-実際のproduction fileでlimit=20000到達イベントを確認したところ、
-`triple_gem_field_v1.15x_n7`は1/50 (2.0%)、`triple_gem_field_v1.15x_n9`は
-5/50 (10.0%)がlimitに到達しており、上記の小統計sweep(2000超で到達率0%)
-より高い到達率だった。そこでn7は同条件・新seedで、n9は`--base-seed 970000`
-を明示して元のrunと同一seedで、`avalanche_size_limit=50000`にて50イベント
-ずつ再計算（`results/root/triple_gem_field_v1.15x_n{7,9}_limit50000_avalanche.root`）:
-
-| ファイル | limit到達割合 (20000) | limit到達割合 (50000) | avalanche size max (20000 / 50000) |
-|---|---|---|---|
-| n7 | 1/50 (2.0%) | 0/50 (0.0%) | 20057 / 23928 |
-| n9 | 5/50 (10.0%) | 0/50 (0.0%) | 20068 / 28591 |
-
-GEM1-extracted cohort数・funnel各段の比率（T1 25/50/75%、GEM2 top-50um等）は
-両limit間でほぼ完全に一致（n9はcohort数10309→10307、n7の各funnel比率も
-1%未満の差）。よって`avalanche_size_limit=20000`はこのproject全体の
-production condition（7x7・9x9いずれも）で測定される効率・透過率を
-実質的に歪めていないことを、実際のproduction統計(各50イベント)で確認した。
-`--slots-per-job`未指定だと9x9メッシュのavalanche jobが`TERM_MEMLIMIT`
-で落ちる（元々5.6GB RSS必要、queue既定の1slot=4GB上限を超過）ため、
-50000のような高いlimitでn9を再計算する際は`--slots-per-job 3`以上が必要。
+production limitは`avalanche_size_limit=20000`を使用する。収束確認の
+詳細（小統計sweep・production統計(n7/n9各50イベント)での50000との直接
+比較）は`docs/validation.md` §2.2参照。
 
 **2026-09-25/26解消 (issue #14): `triple_gem_field_v1.15x_n7_avalanche.root`を
 `--avalanche-size-limit 20000`で再生成済み。** 50イベント中limit到達は1件のみ
@@ -195,34 +154,10 @@ production condition（7x7・9x9いずれも）で測定される効率・透過
   誤って失敗することが判明。rng_seedの妥当性チェックのみに緩和
   （offset/n_events/avalanche_size_limit/geometry_typeのチェックは維持）。
 
-**2026-09-25解消: issue #12 item 3 (7x7 vs 9x9 finite geometry
-convergence)。** `triple_gem_field_v1.15x_n9`(9x9、50イベント、
-avalanche_size_limit=20000)を`triple_gem_field_v1.15x_n7`(7x7、50イベント)
-と`analyze_plane_crossings.py`で比較（2026-09-26、n7がissue #14で
-avalanche_size_limit=20000に再生成された後の数値に更新、両者とも
-同じlimitでの比較になった）:
-
-| 指標 (GEM1-extracted cohort比) | 7x7 (limit=20000) | 9x9 (limit=20000) |
-|---|---|---|
-| T1 25%→75%の低下 | 41.1%→39.2% | 41.1%→40.9% |
-| GEM2 hole entrance | 15.3% | 16.1% |
-| GEM2 bottom | 2.7% | 2.8% |
-| GEM3 top | 0.3% | 0.4% |
-| GEM3 bottom | 0.1% (5/8615) | 0.1% (10/10309) |
-| 最終fateでの"StatusLeftDriftArea"(ラテラル脱出) | 0件 | 0件 |
-
-GEM2以降の各比率は統計誤差内で一致し、両方とも最終fateにラテラル脱出が
-一切ない（5x5で見られた34.2%の大きな損失は完全に解消済み）。7x7側の
-transfer gap 1内でのT1 25%→75%のわずかな残存低下（9x9では消失）のみが
-差分だが、無視できる規模。よって**7x7を production tile sizeとして
-継続採用する**（9x9へ拡張する必要なし）。
-
-同issue item 2として`collisionSteps`(trajectory export時のcollision point
-間引き)の1/5/20 sweepも実施し、GEM1 extraction等の比率・avalanche size
-limit到達割合ともにcollisionSteps値に対する系統的な傾向は見られなかった
-（同じく10-20イベントの統計内）。よって production では軽い設定
-（`collisionSteps`のデフォルト値、現状のproduction再現手順が使う値）を
-そのまま使用してよいと判断する。
+7x7 vs 9x9のfinite geometry convergence、およびcollisionSteps(1/5/20)の
+sweep結果は`docs/validation.md` §2.1/§2.3参照。結論: **7x7をproduction
+tile sizeとして採用**（9x9への拡張は不要）、collisionStepsはデフォルト値
+(100)のまま使用してよい。
 
 ## 3. 出力ディレクトリ構成 (`results/`)
 
@@ -376,26 +311,16 @@ python3 batch/run_avalanche_batch.py ... --njobs 10
 対象外 — 単一の線形システムを解く工程であり、avalanche計算のような
 単純な並列分割ができないため。
 
-## 5.5. Efficiency の定義（GitHub issue #7 item 5 / #12 item 5）
+## 5.5. Efficiency の定義
 
 複数の解析スクリプトが別々のefficiency量を計算しているため、混同を
-避けるためにここで一箇所にまとめる。
-
-| 用語 | 定義 | 測定方法 |
-|---|---|---|
-| **Collection efficiency** | GEM上方の広い一様領域から注入された一次電子のうち、実際にホール開口部へ入った割合 | `geometry/analyze_collection_efficiency.py`。**単独GEM（一様上方電場）でのみ意味を持つ**定義 -- 3段スタック中のGEM2/GEM3は前段の非一様な雪崩出力を受け取るため、この意味でのcollection efficiencyは定義できない（下記「次GEM進入率」参照） |
-| **Local multiplication** | collectionされた一次電子1個あたりの、そのGEM内での二次電子生成数（`track`数） | `analyze_collection_efficiency.py`の`Local multiplication`出力 |
-| **Extraction efficiency** | collectionされた一次電子のうち、そのGEMの底面を実際に下向きに通過した（genuine crossing）割合 | `analyze_collection_efficiency.py`の`Extraction efficiency`出力、または`analyze_single_gem_plane_crossings.py` |
-| **Transfer efficiency** | あるGEMを抜けた電子のうち、transfer gapを生き残って次段のGEM近傍に到達した割合 | `analyze_plane_crossings.py`のfunnel（例: "T1 75%"等の中間平面通過率） |
-| **次GEM進入率 (next-GEM collection)** | 3段スタックのembedded文脈で、あるGEMの実際の（非一様な）雪崩出力のうち、次GEMの実ホール開口部へ入った割合 -- 上記collection efficiencyとは別概念、cascade特有の量 | `analyze_plane_crossings.py`の"GEM2 top (hole entrance)"等 |
-| **Effective gain** | 1個の一次電子（あるいは1個の実イベント）あたり、最終的にreadout/induction面に到達した電子数 -- `AvalancheMicroscopic::GetAvalancheSize()`が返す"gain"（`ne`）とは異なる。`GetAvalancheSize()`は雪崩木全体で生成された総電子数（後で吸収されるものも含む）であり、detector effective gainではない | まだ標準出力化されていない（issue #12 item 1のavalanche size limit convergence確認後に整備予定） |
-
-`macros/gem_avalanche.cpp`のコメントは`GetAvalancheSize()`の`ne`を
-"gain"（生成総数）と呼び、"detector effective gain"とは呼ばないよう
-既に整理済み（2026-09-24）。
+避けるための定義一覧は`docs/validation.md` §3参照（Collection
+efficiency / Local multiplication / Extraction efficiency / Transfer
+efficiency / 次GEM進入率 / Effective gain）。
 
 ## 6. 関連ドキュメント
 
 - `README.md` — プロジェクト概要、対象デバイス、実行環境
+- `docs/validation.md` — production baseline configuration一式、収束確認(tile size/avalanche_size_limit/collisionSteps)結果、物理量の標準定義
 - `docs/debugging_notes.md` — GEM1→GEM2電子透過率問題の調査ログ（issue #2）
 - `docs/pipeline_gotchas.md` — Gmsh/Elmer/Garfield++連携で踏んだ落とし穴集

@@ -42,9 +42,8 @@ J. Phys.: Conf. Ser. 1498 (2020) 012023.
 | Avalanche size limit | 20000 (`EnableAvalancheSizeLimit`) |
 | baseName | `triple_gem_field_v1.15x_n7` |
 
-各値の選定根拠・収束確認の詳細は `docs/reference.md`「現在のproduction
-condition」および`docs/debugging_notes.md`を参照。再現コマンド一式は
-`docs/reference.md`の同節にまとめてある。
+各値の選定根拠・収束確認の詳細は `docs/validation.md` を参照。再現コマンド
+一式は`docs/reference.md`「現在のproduction condition」（§2.5）にまとめてある。
 
 ## Workflow
 
@@ -119,7 +118,7 @@ docs/           詳細ドキュメント（下記「ドキュメント」参照�
 - Stage-by-stage transmission解析 (plane-crossing analysis): 動作確認済み
 - Python可視化レイヤー (geometry/field/avalanche overlay、z方向診断プロット): 動作確認済み
 - Finite-size (tiling) convergence: 7×7で収束確認済み (9×9との比較)
-- Avalanche size limit convergence: 20000で収束確認済み（production condition本体(n7/n9、各50イベント)を50000と直接比較して確認、詳細は`docs/reference.md`参照）
+- Avalanche size limit convergence: 20000で収束確認済み（production condition本体(n7/n9、各50イベント)を50000と直接比較して確認、詳細は`docs/validation.md`参照）
 - Production-level absolute gain validation (voltage scan・文献比較): 進行中 ([issue #15](https://github.com/rjsaito0519/GEM-garfield-simulation/issues/15))
 
 ## 既知の制約
@@ -137,7 +136,9 @@ docs/           詳細ドキュメント（下記「ドキュメント」参照�
   詳細なインストール手順（バージョン互換性の制約、ビルド順序、既知の
   落とし穴を含む）
 - `docs/reference.md` — パイプラインの実行手順、production condition再現、
-  `results/`出力構成、ROOT出力スキーマ、efficiency定義
+  `results/`出力構成、ROOT出力スキーマ
+- `docs/validation.md` — production baseline configuration一式、収束確認結果、
+  efficiency等の物理量定義
 - `docs/debugging_notes.md` — 開発中の調査ログ・仮説検証の記録（日付順）
 - `docs/pipeline_gotchas.md` — Gmsh/Elmer/Garfield++/ROOT/Python連携で踏んだ落とし穴集
 - 関連する主な GitHub Issues: [#15](https://github.com/rjsaito0519/GEM-garfield-simulation/issues/15) (periodic boundary・voltage scan・文献比較、今後の作業)
