@@ -119,15 +119,13 @@ docs/           詳細ドキュメント（下記「ドキュメント」参照�
 - Stage-by-stage transmission解析 (plane-crossing analysis): 動作確認済み
 - Python可視化レイヤー (geometry/field/avalanche overlay、z方向診断プロット): 動作確認済み
 - Finite-size (tiling) convergence: 7×7で収束確認済み (9×9との比較)
-- Avalanche size limit convergence: 20000で収束確認済み（小統計での確認、詳細は下記「既知の制約」参照）
+- Avalanche size limit convergence: 20000で収束確認済み（production condition本体(n7/n9、各50イベント)を50000と直接比較して確認、詳細は`docs/reference.md`参照）
 - Production-level absolute gain validation (voltage scan・文献比較): 進行中 ([issue #15](https://github.com/rjsaito0519/GEM-garfield-simulation/issues/15))
 
 ## 既知の制約
 
 - **注入条件**: 現在の一次電子はGEM1ホール軸近傍への簡略化された注入
   （診断目的、実機のdrift/diffusion後の分布を再現するものではない）
-- **avalanche size limit convergence**: 各sweep点10-20イベントの小統計に
-  基づく判断であり、厳密な収束証明ではない
 - **Periodic boundary condition**: 未実装（現状は有限タイルでの近似、[issue #15](https://github.com/rjsaito0519/GEM-garfield-simulation/issues/15)）
 - **誘電体近似**: dielectric layerは比誘電率のみでモデル化（詳細構造は簡略化）
 

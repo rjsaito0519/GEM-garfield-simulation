@@ -149,6 +149,29 @@ limit到達割合は5000以上で0%に落ち、GEM1-extracted cohortの各funnel
 **ただし各点10-20イベントと統計が小さく、厳密な収束証明ではなく「傾向として
 問題なし」という判断である点に注意。**
 
+**2026-09-30追記: production configuration本体(n7/n9、各50イベント)で
+`avalanche_size_limit=50000`との直接比較を実施、issue #18項目1。**
+実際のproduction fileでlimit=20000到達イベントを確認したところ、
+`triple_gem_field_v1.15x_n7`は1/50 (2.0%)、`triple_gem_field_v1.15x_n9`は
+5/50 (10.0%)がlimitに到達しており、上記の小統計sweep(2000超で到達率0%)
+より高い到達率だった。そこでn7は同条件・新seedで、n9は`--base-seed 970000`
+を明示して元のrunと同一seedで、`avalanche_size_limit=50000`にて50イベント
+ずつ再計算（`results/root/triple_gem_field_v1.15x_n{7,9}_limit50000_avalanche.root`）:
+
+| ファイル | limit到達割合 (20000) | limit到達割合 (50000) | avalanche size max (20000 / 50000) |
+|---|---|---|---|
+| n7 | 1/50 (2.0%) | 0/50 (0.0%) | 20057 / 23928 |
+| n9 | 5/50 (10.0%) | 0/50 (0.0%) | 20068 / 28591 |
+
+GEM1-extracted cohort数・funnel各段の比率（T1 25/50/75%、GEM2 top-50um等）は
+両limit間でほぼ完全に一致（n9はcohort数10309→10307、n7の各funnel比率も
+1%未満の差）。よって`avalanche_size_limit=20000`はこのproject全体の
+production condition（7x7・9x9いずれも）で測定される効率・透過率を
+実質的に歪めていないことを、実際のproduction統計(各50イベント)で確認した。
+`--slots-per-job`未指定だと9x9メッシュのavalanche jobが`TERM_MEMLIMIT`
+で落ちる（元々5.6GB RSS必要、queue既定の1slot=4GB上限を超過）ため、
+50000のような高いlimitでn9を再計算する際は`--slots-per-job 3`以上が必要。
+
 **2026-09-25/26解消 (issue #14): `triple_gem_field_v1.15x_n7_avalanche.root`を
 `--avalanche-size-limit 20000`で再生成済み。** 50イベント中limit到達は1件のみ
 （旧`avalanche_size_limit=2000`では28件だった）。再生成の過程で2つの実バグを
