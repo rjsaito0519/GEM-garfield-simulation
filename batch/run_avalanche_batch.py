@@ -251,6 +251,17 @@ def main() -> None:
     args.mesh_dir = os.path.abspath(args.mesh_dir)
     args.gas_file = os.path.abspath(args.gas_file)
 
+    if not os.path.isdir(args.mesh_dir):
+        parser.error(f"mesh_dir not found: {args.mesh_dir}")
+    if not os.path.isfile(args.gas_file):
+        parser.error(f"gas_file not found: {args.gas_file}")
+    if not (args.z_sensor_min < args.z_sensor_max):
+        parser.error(f"z_sensor_min must be < z_sensor_max, got {args.z_sensor_min} / {args.z_sensor_max}")
+    if args.injection_radius_cm < 0:
+        parser.error(f"injection_radius_cm must be >= 0, got {args.injection_radius_cm}")
+    if args.collision_steps <= 0:
+        parser.error(f"collision_steps must be > 0, got {args.collision_steps}")
+
     base_name = os.path.basename(os.path.normpath(args.mesh_dir))
     chunks = _split_events(args.n_events_total, args.njobs)
     if not chunks:

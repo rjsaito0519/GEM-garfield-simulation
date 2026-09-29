@@ -45,6 +45,10 @@ def main() -> None:
         sys.exit(1)
     root_path = sys.argv[1]
     gem_type = sys.argv[2] if len(sys.argv) > 2 else "50"
+    if gem_type not in _GEM_PARAMS_BY_TYPE:
+        raise ValueError(
+            f"gem_type must be one of {sorted(_GEM_PARAMS_BY_TYPE)}, got {gem_type!r}"
+        )
     params = _GEM_PARAMS_BY_TYPE[gem_type]
     z_gem_top, z_gem_bottom = _gem_z_bounds(gem_type)
 
@@ -129,4 +133,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (ValueError, OSError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)

@@ -140,7 +140,33 @@ int main(int argc, char* argv[]) {
             << "\n";
   // See the usage docstring above for why this default (2000) can
   // significantly undercount transmission once Penning transfer is on.
-  const std::size_t avalancheSizeLimit = argc > 15 ? static_cast<std::size_t>(std::atoi(argv[15])) : 2000;
+  // Validated as a signed int before the size_t cast below -- casting a
+  // negative/malformed value straight to size_t would silently wrap it
+  // into a huge cap instead of failing.
+  const int avalancheSizeLimitArg = argc > 15 ? std::atoi(argv[15]) : 2000;
+
+  if (nEvents <= 0) {
+    std::cerr << "Error: n events must be > 0, got '" << argv[3] << "'\n";
+    return 1;
+  }
+  if (!(zSensorMin < zSensorMax)) {
+    std::cerr << "Error: zSensorMin must be < zSensorMax, got zSensorMin=" << zSensorMin
+               << " zSensorMax=" << zSensorMax << "\n";
+    return 1;
+  }
+  if (injectionRadiusCm < 0.0) {
+    std::cerr << "Error: injectionRadiusCm must be >= 0, got " << injectionRadiusCm << "\n";
+    return 1;
+  }
+  if (collisionSteps <= 0) {
+    std::cerr << "Error: collisionSteps must be > 0, got '" << argv[12] << "'\n";
+    return 1;
+  }
+  if (avalancheSizeLimitArg <= 0) {
+    std::cerr << "Error: avalancheSizeLimit must be > 0, got '" << argv[15] << "'\n";
+    return 1;
+  }
+  const std::size_t avalancheSizeLimit = static_cast<std::size_t>(avalancheSizeLimitArg);
 
   MediumMagboltz gas;
   if (!gas.LoadGasFile(gasFile)) {
@@ -201,6 +227,12 @@ int main(int argc, char* argv[]) {
 
   const std::string rootPath = outDir + baseName + "_avalanche.root";
   TFile* rootFile = TFile::Open(rootPath.c_str(), "UPDATE");
+  if (!rootFile || rootFile->IsZombie()) {
+    std::cerr << "Error: could not open output ROOT file '" << rootPath
+               << "' in UPDATE mode (check that the directory exists, is "
+                  "writable, and disk quota is not exceeded).\n";
+    return 1;
+  }
   rootFile->Delete("Trajectories;*");
   TTree trajectoriesTree("Trajectories", "Per-point avalanche electron trajectories");
   // Disable ROOT's automatic mid-run TTree autosave (default: every ~300MB

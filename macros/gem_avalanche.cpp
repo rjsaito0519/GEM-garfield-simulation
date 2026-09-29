@@ -144,6 +144,25 @@ int main(int argc, char* argv[]) {
   // See the usage docstring above for why this default (2000) can
   // significantly undercount transmission once Penning transfer is on.
   const int avalancheSizeLimit = argc > 15 ? std::atoi(argv[15]) : 2000;
+
+  if (nEvents <= 0) {
+    std::cerr << "Error: n events must be > 0, got '" << argv[3] << "'\n";
+    return 1;
+  }
+  if (!(zSensorMin < zSensorMax)) {
+    std::cerr << "Error: zSensorMin must be < zSensorMax, got zSensorMin=" << zSensorMin
+               << " zSensorMax=" << zSensorMax << "\n";
+    return 1;
+  }
+  if (injectionRadiusCm < 0.0) {
+    std::cerr << "Error: injectionRadiusCm must be >= 0, got " << injectionRadiusCm << "\n";
+    return 1;
+  }
+  if (avalancheSizeLimit <= 0) {
+    std::cerr << "Error: avalancheSizeLimit must be > 0, got '" << argv[15] << "'\n";
+    return 1;
+  }
+
   std::cout << "RNG seed: " << (hasExplicitSeed ? std::to_string(seed) : "auto (process-default)")
             << "\n";
 
@@ -241,6 +260,12 @@ int main(int argc, char* argv[]) {
   // tally below. See docs/debugging_notes.md.
   const std::string rootPath = rootOutDir + baseName + "_avalanche.root";
   TFile* rootFile = TFile::Open(rootPath.c_str(), "UPDATE");
+  if (!rootFile || rootFile->IsZombie()) {
+    std::cerr << "Error: could not open output ROOT file '" << rootPath
+               << "' in UPDATE mode (check that the directory exists, is "
+                  "writable, and disk quota is not exceeded).\n";
+    return 1;
+  }
   rootFile->Delete("Endpoints;*");
   TTree endpointsTree("Endpoints", "Per-electron-endpoint avalanche data");
   // Disable ROOT's automatic mid-run TTree autosave -- see the identical
